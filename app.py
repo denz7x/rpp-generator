@@ -61,12 +61,21 @@ except Exception as e:
     model = genai.GenerativeModel('gemini-1.5-flash') # Fallback manual
 
 # --- 4. TAMPILAN APLIKASI ---
-st.title("📚 Generator Perencanaan Pembelajaran")
+st.markdown(
+    """
+    <div style='text-align: center; background-color: #007bff; padding: 20px; border-radius: 10px; margin-bottom: 20px;'>
+        <h2 style='color: white; margin: 0; font-size: 28px;'>
+            📚 Generator Perencanaan Pembelajaran Mendalam 📚
+        </h2>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 st.markdown("Buat Modul Ajar/RPP lalu download file Word-nya.")
 st.markdown(
     """
     <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px;'>
-        <marquee direction='left' scrollamount='8' style='color: red; font-weight: bold; font-size: 18px;'>
+        <marquee direction='left' scrollamount='6' style='color: red; font-weight: bold; font-size: 18px;'>
             Oleh : Ceng Ucu Muhammad, S.H - SMP IT NURUSY-SYIFA.
         </marquee>
     </div>
@@ -139,5 +148,6 @@ if st.button("🚀 Buat Modul Ajar", type="primary"):
                 
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
+
 
 
