@@ -64,7 +64,7 @@ except Exception as e:
 st.markdown(
     """
     <div style='text-align: center; background-color: #007bff; padding: 20px; border-radius: 10px; margin-bottom: 20px;'>
-        <h2 style='color: white; margin: 0; font-size: 28px;'>
+        <h2 style='color: white; margin: 0; font-size: 26px;'>
             📚 Generator Perencanaan Pembelajaran Mendalam 📚
         </h2>
     </div>
@@ -148,6 +148,7 @@ if st.button("🚀 Buat Modul Ajar", type="primary"):
                 
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
+
 
 
 
