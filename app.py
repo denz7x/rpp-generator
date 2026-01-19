@@ -63,7 +63,16 @@ except Exception as e:
 # --- 4. TAMPILAN APLIKASI ---
 st.title("📚 Generator Perencanaan Pembelajaran")
 st.markdown("Buat Modul Ajar/RPP lalu download file Word-nya.")
-st.markdown("Oleh : Ceng Ucu Muhammad, S.H - SMP IT NURUSY-SYIFA.")
+st.markdown(
+    """
+    <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px;'>
+        <marquee direction='left' scrollamount='8' style='color: red; font-weight: bold; font-size: 18px;'>
+            Oleh : Ceng Ucu Muhammad, S.H - SMP IT NURUSY-SYIFA.
+        </marquee>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # Form Input
 st.header("1. Informasi Umum")
@@ -130,4 +139,5 @@ if st.button("🚀 Buat Modul Ajar", type="primary"):
                 
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
+
 
