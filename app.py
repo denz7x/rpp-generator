@@ -74,8 +74,8 @@ st.markdown(
 st.markdown("Buat Modul Ajar/RPP lalu download file Word-nya.")
 st.markdown(
     """
-    <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px;'>
-        <marquee direction='left' scrollamount='6' style='color: red; font-weight: bold; font-size: 18px;'>
+    <div style='background-color: #ffe6e6; padding: 8px; border-radius: 5px;'>
+        <marquee direction='left' scrollamount='6' style='color: red; font-weight: bold; font-size: 16px;'>
             Oleh : Ceng Ucu Muhammad, S.H - SMP IT NURUSY-SYIFA.
         </marquee>
     </div>
@@ -148,6 +148,7 @@ if st.button("🚀 Buat Modul Ajar", type="primary"):
                 
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
+
 
 
 
