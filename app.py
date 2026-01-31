@@ -6,7 +6,11 @@ from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# --- 1. KONFIGURASI HALAMAN & CSS ---
+# --- 1. KONFIGURASI API KEY (HARDCODED) ---
+# API Key Anda sudah dimasukkan di sini
+MY_API_KEY = "AIzaSyDm4BXch5vuDdl5jodG4xUx78-4iqdX0r0"
+
+# --- 2. KONFIGURASI HALAMAN & CSS ---
 st.set_page_config(
     page_title="AI Modul Ajar Generator",
     page_icon="🎓",
@@ -27,13 +31,21 @@ st.markdown("""
         color: white;
     }
     .stButton>button:hover { background-color: #45a049; }
-    h1, h2, h3 { color: #2c3e50; }
+    h1, h2, h3 { color: #2c3e50; font-family: 'Segoe UI', sans-serif; }
     .stTextInput>div>div>input { border-radius: 8px; }
+    
+    /* Style untuk Running Text Container */
+    .running-text-container {
+        background-color: #ffe6e6; 
+        padding: 10px; 
+        border-radius: 5px;
+        margin-bottom: 20px;
+        border: 1px solid #ffcccc;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. DATABASE SEMENTARA (SESSION STATE) ---
-# Menyimpan Profil Lulusan agar bisa diedit
+# --- 3. DATABASE SEMENTARA (SESSION STATE) ---
 if 'profil_db' not in st.session_state:
     st.session_state['profil_db'] = [
         "Beriman, Bertakwa kepada Tuhan YME, dan Berakhlak Mulia",
@@ -44,56 +56,57 @@ if 'profil_db' not in st.session_state:
         "Kreatif"
     ]
 
-# --- 3. FUNGSI AI GENERATOR (GEMINI) ---
-def generate_rpp_content(api_key, model_name, mapel, topik, kelas, waktu, profil_list):
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(model_name)
-    
-    profil_str = ", ".join(profil_list)
-    
-    # Prompt khusus agar AI mengeluarkan data JSON
-    prompt = f"""
-    Bertindaklah sebagai Guru Profesional. Buatkan konten Modul Ajar/RPP lengkap.
-    
-    Informasi:
-    - Mapel: {mapel}
-    - Kelas: {kelas}
-    - Topik: {topik}
-    - Waktu: {waktu}
-    - Profil Lulusan: {profil_str}
-
-    Instruksi Penting:
-    Berikan output HANYA dalam format JSON valid (tanpa markdown ```json).
-    Struktur JSON harus seperti ini:
-    {{
-        "tujuan": "Tuliskan 2 tujuan pembelajaran spesifik.",
-        "pemahaman": "Pertanyaan pemantik atau pemahaman bermakna.",
-        "pendahuluan": "Langkah kegiatan pendahuluan (poin-poin).",
-        "inti": "Langkah kegiatan inti detail sesuai model pembelajaran aktif.",
-        "penutup": "Kegiatan penutup dan refleksi.",
-        "asesmen": "Teknik penilaian (Sikap, Pengetahuan, Keterampilan)."
-    }}
-    Pastikan bahasa Indonesia formal pendidikan.
-    """
-    
+# --- 4. FUNGSI AI GENERATOR (GEMINI) ---
+def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list):
+    # Konfigurasi API menggunakan Key yang sudah di-hardcode
     try:
+        genai.configure(api_key=MY_API_KEY)
+        model = genai.GenerativeModel(model_name)
+        
+        profil_str = ", ".join(profil_list)
+        
+        # Prompt Engineering (Instruksi ke AI)
+        prompt = f"""
+        Bertindaklah sebagai Guru Profesional Kurikulum Merdeka. 
+        Buatkan konten Modul Ajar/RPP lengkap dalam format JSON.
+        
+        Data:
+        - Mapel: {mapel}
+        - Kelas: {kelas}
+        - Topik: {topik}
+        - Waktu: {waktu}
+        - Profil: {profil_str}
+
+        Output WAJIB JSON valid (tanpa markdown ```json):
+        {{
+            "tujuan": "2-3 tujuan pembelajaran spesifik & terukur.",
+            "pemahaman": "Pertanyaan pemantik.",
+            "pendahuluan": "Poin kegiatan pendahuluan (apersepsi).",
+            "inti": "Langkah kegiatan inti detail (Model PBL/PjBL).",
+            "penutup": "Refleksi dan penutup.",
+            "asesmen": "Teknik penilaian (Sikap, Pengetahuan, Keterampilan)."
+        }}
+        Gunakan Bahasa Indonesia formal.
+        """
+        
         response = model.generate_content(prompt)
-        # Membersihkan hasil jika AI menyertakan backticks markdown
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_text)
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(text)
+        
     except Exception as e:
+        st.error(f"Error AI: {str(e)}")
         return None
 
-# --- 4. FUNGSI PEMBUAT DOCX (WORD) ---
+# --- 5. FUNGSI PEMBUAT DOCX (WORD) ---
 def create_docx(data_input, ai_data):
     doc = Document()
     
-    # Gaya Judul
+    # Judul
     heading = doc.add_heading('MODUL AJAR / RPP', 0)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph("")
 
-    # Tabel Identitas (Agar Rapi)
+    # Tabel Identitas Rapi
     table = doc.add_table(rows=5, cols=3)
     table.autofit = False
     table.columns[0].width = Inches(1.5)
@@ -120,7 +133,7 @@ def create_docx(data_input, ai_data):
     doc.add_heading('B. Profil Lulusan', level=1)
     if data_input['profil']:
         for p in data_input['profil']:
-            doc.add_paragraph(f"- {p}")
+            doc.add_paragraph(f"- {p}", style='List Bullet')
     else:
         doc.add_paragraph("-")
 
@@ -150,40 +163,35 @@ def create_docx(data_input, ai_data):
     sig_table.autofit = True
     
     c1 = sig_table.cell(0, 0)
-    c1.text = f"Mengetahui,\nKepala Sekolah\n\n\n\n{data_input['kepsek']}"
-    c1.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p1 = c1.paragraphs[0]
+    p1.add_run(f"Mengetahui,\nKepala Sekolah\n\n\n\n{data_input['kepsek']}").bold = True
+    p1.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     c2 = sig_table.cell(0, 1)
-    c2.text = f"Guru Mata Pelajaran\n\n\n\n{data_input['guru']}"
-    c2.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p2 = c2.paragraphs[0]
+    p2.add_run(f"Guru Mata Pelajaran\n\n\n\n{data_input['guru']}").bold = True
+    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer
 
-# --- 5. HALAMAN: UTAMA (GENERATOR) ---
+# --- 6. HALAMAN UTAMA ---
 def page_generator():
     st.title("📚 Generator Modul Ajar Otomatis")
     
-    # RUNNING TEXT (FITUR PERMINTAAN)
+    # Running Text (Permintaan Khusus)
     st.markdown("""
-        <div style='background-color: #ffe6e6; padding: 10px; border-radius: 5px;'>
+        <div class="running-text-container">
             <marquee direction="left" scrollamount="8" style="color: red; font-weight: bold; font-size: 16px;">
             Aplikasi ini dibuat oleh Ceng Ucu Muhammad, S.H - SMP IT Nurusy Syifa
             </marquee>
         </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("---")
-    
-    # Ambil API Key dari Sidebar
-    api_key = st.session_state.get('api_key', '')
-    model_choice = st.session_state.get('model_choice', 'gemini-1.5-flash')
-
-    if not api_key:
-        st.warning("⚠️ Silakan masukkan API Key di menu sebelah kiri (Sidebar) terlebih dahulu.")
-        return
+    # Model Choice (Hidden logic)
+    model_choice = "gemini-1.5-flash" # Default model yang cepat
 
     # FORM INPUT
     with st.form("main_form"):
@@ -203,41 +211,41 @@ def page_generator():
             kelas = st.selectbox("Kelas", ["VII", "VIII", "IX", "X", "XI", "XII"])
         with c5:
             waktu = st.text_input("Alokasi Waktu", placeholder="2 JP x 40 Menit")
-            topik = st.text_input("Topik Materi (Wajib)", placeholder="Contoh: Pencemaran Lingkungan")
+            topik = st.text_input("Topik Materi (Wajib)", placeholder="Contoh: Sistem Pencernaan")
 
         st.subheader("3. Profil Lulusan")
         profil_pilihan = st.multiselect(
-            "Pilih Profil yang ingin dikuatkan:", 
+            "Pilih Profil yang dikuatkan:", 
             options=st.session_state['profil_db'],
-            default=st.session_state['profil_db'][:2] # Default pilih 2 pertama
+            default=st.session_state['profil_db'][:2] 
         )
         
         st.markdown("---")
+        # Tombol Submit Form
         submitted = st.form_submit_button("🚀 Generate Modul Ajar (AI)")
 
-    # LOGIKA SETELAH TOMBOL DITEKAN
+    # LOGIKA PROSES (DI LUAR FORM AGAR TIDAK ERROR SAAT DOWNLOAD)
     if submitted:
         if not topik or not mapel:
-            st.error("❌ Mata Pelajaran dan Topik wajib diisi!")
+            st.error("❌ Mohon isi Mata Pelajaran dan Topik Materi!")
         else:
-            with st.spinner("🤖 AI sedang berpikir dan menyusun dokumen..."):
-                # 1. Panggil AI
-                ai_result = generate_rpp_content(api_key, model_choice, mapel, topik, kelas, waktu, profil_pilihan)
+            with st.spinner("🤖 AI sedang menyusun RPP... Mohon tunggu..."):
+                # Panggil AI
+                ai_result = generate_rpp_content(model_choice, mapel, topik, kelas, waktu, profil_pilihan)
                 
                 if ai_result:
-                    # 2. Siapkan Data untuk Word
+                    # Siapkan Data Word
                     data_input = {
                         'guru': nama_guru, 'sekolah': nama_sekolah, 'kepsek': nama_kepsek,
                         'mapel': mapel, 'kelas': kelas, 'waktu': waktu,
                         'profil': profil_pilihan
                     }
                     
-                    # 3. Buat File Word
                     docx_file = create_docx(data_input, ai_result)
                     
-                    st.success("✅ Berhasil! Silakan download dokumen di bawah ini.")
+                    st.success("✅ Berhasil! Dokumen siap diunduh.")
                     
-                    # 4. Tombol Download
+                    # Tombol Download
                     st.download_button(
                         label="📥 Download Modul Ajar (.docx)",
                         data=docx_file,
@@ -245,62 +253,50 @@ def page_generator():
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
                     
-                    # 5. Preview Singkat
-                    with st.expander("👁️ Lihat Preview Konten AI"):
-                        st.json(ai_result)
-                else:
-                    st.error("Gagal mendapatkan respons dari AI. Cek API Key atau koneksi internet.")
+                    # Preview
+                    with st.expander("👁️ Lihat Preview Isi"):
+                        st.write("**Tujuan:**", ai_result.get('tujuan'))
+                        st.write("**Kegiatan Inti:**", ai_result.get('inti'))
 
-# --- 6. HALAMAN: DATABASE PROFIL ---
+# --- 7. HALAMAN DATABASE PROFIL ---
 def page_profil():
     st.title("🎓 Database Profil Lulusan")
-    st.info("Di sini Anda bisa menambah atau menghapus opsi Profil Lulusan yang muncul di halaman utama.")
     
-    col_in, col_btn = st.columns([3, 1])
-    with col_in:
+    c_in, c_btn = st.columns([3, 1])
+    with c_in:
         new_item = st.text_input("Tambah Profil Baru")
-    with col_btn:
+    with c_btn:
         st.write("")
-        st.write("") # Spasi layout
+        st.write("")
         if st.button("➕ Tambah"):
-            if new_item and new_item not in st.session_state['profil_db']:
+            if new_item:
                 st.session_state['profil_db'].append(new_item)
-                st.success("Ditambahkan!")
+                st.success("OK")
     
-    st.markdown("### Daftar Profil Saat Ini:")
+    st.markdown("### Daftar Profil:")
     for i, item in enumerate(st.session_state['profil_db']):
         c1, c2 = st.columns([4, 1])
-        c1.markdown(f"**{i+1}. {item}**")
+        c1.info(item)
         if c2.button("Hapus", key=f"del_{i}"):
             st.session_state['profil_db'].pop(i)
             st.rerun()
 
-# --- 7. NAVIGASI SIDEBAR ---
+# --- 8. NAVIGASI SIDEBAR ---
 with st.sidebar:
-    st.title("Navigasi")
+    st.image("[https://cdn-icons-png.flaticon.com/512/201/201612.png](https://cdn-icons-png.flaticon.com/512/201/201612.png)", width=80)
+    st.title("Menu Navigasi")
+    menu = st.radio("Pilih Halaman:", ["📝 Buat Modul Ajar", "🎓 Database Profil", "ℹ️ Tentang"])
     
-    # Input API Key (Supaya Aman & Fleksibel)
-    st.markdown("### 🔑 Konfigurasi AI")
-    # Default key bisa dimasukkan di value="" jika untuk penggunaan pribadi sendiri
-    # Namun disarankan dikosongkan agar user input sendiri
-    api_key_input = st.text_input("Google API Key", type="password", help="Dapatkan di aistudio.google.com")
-    if api_key_input:
-        st.session_state['api_key'] = api_key_input
-    
-    # Pilihan Model
-    model_opts = ["gemini-1.5-flash", "gemini-pro"]
-    st.session_state['model_choice'] = st.selectbox("Model AI", model_opts)
-
     st.markdown("---")
-    menu = st.radio("Pilih Menu:", ["📝 Buat Modul Ajar", "🎓 Database Profil", "ℹ️ Tentang"])
+    st.caption("Status AI: ✅ Terhubung")
 
-# --- 8. ROUTING ---
+# --- 9. ROUTING ---
 if menu == "📝 Buat Modul Ajar":
     page_generator()
 elif menu == "🎓 Database Profil":
     page_profil()
 elif menu == "ℹ️ Tentang":
     st.title("Tentang Aplikasi")
-    st.write("Aplikasi Generator Modul Ajar ini dikembangkan untuk membantu guru menyusun administrasi dengan cepat menggunakan kecerdasan buatan (AI).")
-    st.markdown("**Developer:** Ceng Ucu Muhammad, S.H")
-    st.markdown("**Instansi:** SMP IT Nurusy Syifa")
+    st.write("Generator Modul Ajar AI (Versi Auto-Key)")
+    st.write("Developer: Ceng Ucu Muhammad, S.H")
+    st.write("Instansi: SMP IT Nurusy Syifa")
