@@ -7,7 +7,6 @@ from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # --- 1. KONFIGURASI API KEY (HARDCODED) ---
-# API Key Anda sudah dimasukkan di sini
 MY_API_KEY = "AIzaSyDm4BXch5vuDdl5jodG4xUx78-4iqdX0r0"
 
 # --- 2. KONFIGURASI HALAMAN & CSS ---
@@ -18,7 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS untuk tampilan profesional
+# Custom CSS
 st.markdown("""
 <style>
     .main { background-color: #f8f9fa; }
@@ -34,7 +33,6 @@ st.markdown("""
     h1, h2, h3 { color: #2c3e50; font-family: 'Segoe UI', sans-serif; }
     .stTextInput>div>div>input { border-radius: 8px; }
     
-    /* Style untuk Running Text Container */
     .running-text-container {
         background-color: #ffe6e6; 
         padding: 10px; 
@@ -45,7 +43,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. DATABASE SEMENTARA (SESSION STATE) ---
+# --- 3. DATABASE SEMENTARA ---
 if 'profil_db' not in st.session_state:
     st.session_state['profil_db'] = [
         "Beriman, Bertakwa kepada Tuhan YME, dan Berakhlak Mulia",
@@ -56,16 +54,14 @@ if 'profil_db' not in st.session_state:
         "Kreatif"
     ]
 
-# --- 4. FUNGSI AI GENERATOR (GEMINI) ---
+# --- 4. FUNGSI AI GENERATOR ---
 def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list):
-    # Konfigurasi API menggunakan Key yang sudah di-hardcode
     try:
         genai.configure(api_key=MY_API_KEY)
         model = genai.GenerativeModel(model_name)
         
         profil_str = ", ".join(profil_list)
         
-        # Prompt Engineering (Instruksi ke AI)
         prompt = f"""
         Bertindaklah sebagai Guru Profesional Kurikulum Merdeka. 
         Buatkan konten Modul Ajar/RPP lengkap dalam format JSON.
@@ -97,16 +93,14 @@ def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list):
         st.error(f"Error AI: {str(e)}")
         return None
 
-# --- 5. FUNGSI PEMBUAT DOCX (WORD) ---
+# --- 5. FUNGSI PEMBUAT DOCX ---
 def create_docx(data_input, ai_data):
     doc = Document()
     
-    # Judul
     heading = doc.add_heading('MODUL AJAR / RPP', 0)
     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph("")
 
-    # Tabel Identitas Rapi
     table = doc.add_table(rows=5, cols=3)
     table.autofit = False
     table.columns[0].width = Inches(1.5)
@@ -126,7 +120,6 @@ def create_docx(data_input, ai_data):
 
     doc.add_paragraph("")
     
-    # Isi dari AI
     doc.add_heading('A. Tujuan Pembelajaran', level=1)
     doc.add_paragraph(ai_data.get('tujuan', '-'))
 
@@ -157,7 +150,6 @@ def create_docx(data_input, ai_data):
     doc.add_heading('E. Asesmen', level=1)
     doc.add_paragraph(ai_data.get('asesmen', '-'))
 
-    # Tanda Tangan
     doc.add_paragraph("\n\n")
     sig_table = doc.add_table(rows=1, cols=2)
     sig_table.autofit = True
@@ -181,7 +173,6 @@ def create_docx(data_input, ai_data):
 def page_generator():
     st.title("📚 Generator Modul Ajar Otomatis")
     
-    # Running Text (Permintaan Khusus)
     st.markdown("""
         <div class="running-text-container">
             <marquee direction="left" scrollamount="8" style="color: red; font-weight: bold; font-size: 16px;">
@@ -190,10 +181,8 @@ def page_generator():
         </div>
     """, unsafe_allow_html=True)
     
-    # Model Choice (Hidden logic)
-    model_choice = "gemini-1.5-flash" # Default model yang cepat
+    model_choice = "gemini-1.5-flash" 
 
-    # FORM INPUT
     with st.form("main_form"):
         st.subheader("1. Identitas Sekolah")
         c1, c2, c3 = st.columns(3)
@@ -221,20 +210,16 @@ def page_generator():
         )
         
         st.markdown("---")
-        # Tombol Submit Form
         submitted = st.form_submit_button("🚀 Generate Modul Ajar (AI)")
 
-    # LOGIKA PROSES (DI LUAR FORM AGAR TIDAK ERROR SAAT DOWNLOAD)
     if submitted:
         if not topik or not mapel:
             st.error("❌ Mohon isi Mata Pelajaran dan Topik Materi!")
         else:
             with st.spinner("🤖 AI sedang menyusun RPP... Mohon tunggu..."):
-                # Panggil AI
                 ai_result = generate_rpp_content(model_choice, mapel, topik, kelas, waktu, profil_pilihan)
                 
                 if ai_result:
-                    # Siapkan Data Word
                     data_input = {
                         'guru': nama_guru, 'sekolah': nama_sekolah, 'kepsek': nama_kepsek,
                         'mapel': mapel, 'kelas': kelas, 'waktu': waktu,
@@ -245,7 +230,6 @@ def page_generator():
                     
                     st.success("✅ Berhasil! Dokumen siap diunduh.")
                     
-                    # Tombol Download
                     st.download_button(
                         label="📥 Download Modul Ajar (.docx)",
                         data=docx_file,
@@ -253,7 +237,6 @@ def page_generator():
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
                     
-                    # Preview
                     with st.expander("👁️ Lihat Preview Isi"):
                         st.write("**Tujuan:**", ai_result.get('tujuan'))
                         st.write("**Kegiatan Inti:**", ai_result.get('inti'))
@@ -283,7 +266,9 @@ def page_profil():
 
 # --- 8. NAVIGASI SIDEBAR ---
 with st.sidebar:
+    # --- PERBAIKAN: HANYA URL MURNI, JANGAN PAKAI FORMAT MARKDOWN ---
     st.image("[https://cdn-icons-png.flaticon.com/512/201/201612.png](https://cdn-icons-png.flaticon.com/512/201/201612.png)", width=80)
+    
     st.title("Menu Navigasi")
     menu = st.radio("Pilih Halaman:", ["📝 Buat Modul Ajar", "🎓 Database Profil", "ℹ️ Tentang"])
     
