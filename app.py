@@ -6,14 +6,15 @@ from docx import Document
 from docx.shared import Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# --- 1. KONFIGURASI API KEY ---
-MY_API_KEY = "AIzaSyDm4BXch5vuDdl5jodG4xUx78-4iqdX0r0"
+# --- 1. KONFIGURASI API KEY (WAJIB DIGANTI) ---
+# Hapus tulisan PASTE_KEY_BARU_DISINI dan tempel API Key baru Anda di antara tanda kutip
+MY_API_KEY = "AIzaSyBNML1Sxl73d2H8-AMsHKQm1RryGH1YRWc"
 
 # Konfigurasi Awal
 try:
     genai.configure(api_key=MY_API_KEY)
 except Exception as e:
-    st.error(f"Error API Key: {e}")
+    st.error(f"Error Konfigurasi: {e}")
 
 # --- 2. SETUP HALAMAN ---
 st.set_page_config(
@@ -47,27 +48,26 @@ if 'profil_db' not in st.session_state:
         "Kreatif"
     ]
 
-# --- 4. FUNGSI OTOMATIS CARI MODEL (ANTI ERROR 404) ---
+# --- 4. FUNGSI OTOMATIS CARI MODEL ---
 def get_available_model():
-    # Fungsi ini mencari model yang tersedia di akun Anda
     try:
         available_models = []
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 available_models.append(m.name)
         
-        # Prioritas model: gemini-1.5-flash -> gemini-pro -> sembarang yang ada
         if not available_models:
             return None
         
-        # Cari yang paling umum (gemini-pro biasanya aman)
-        default_model = "models/gemini-pro"
-        if default_model in available_models:
-            return default_model
+        # Prioritas: Flash -> Pro -> Apa saja
+        if "models/gemini-1.5-flash" in available_models:
+            return "models/gemini-1.5-flash"
+        if "models/gemini-pro" in available_models:
+            return "models/gemini-pro"
             
-        return available_models[0] # Ambil apa saja yang ada
+        return available_models[0]
     except:
-        return "models/gemini-pro" # Fallback terakhir
+        return "models/gemini-pro" 
 
 # --- 5. FUNGSI AI ---
 def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list):
@@ -95,7 +95,7 @@ def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list):
         text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
     except Exception as e:
-        st.error(f"Gagal Generate: {str(e)}")
+        st.error(f"Gagal Generate (Cek API Key): {str(e)}")
         return None
 
 # --- 6. FUNGSI WORD ---
@@ -167,12 +167,8 @@ def page_generator():
     
     # --- AUTO DETECT MODEL ---
     active_model = get_available_model()
-    if not active_model:
-        st.error("❌ Tidak ada model AI yang aktif di API Key ini. Coba buat API Key baru.")
-        st.stop()
-    else:
-        st.caption(f"✅ Terhubung ke AI Model: {active_model}")
-
+    
+    # FORM
     with st.form("main"):
         c1, c2, c3 = st.columns(3)
         nama_guru = c1.text_input("Guru")
@@ -187,18 +183,21 @@ def page_generator():
         
         profil = st.multiselect("Profil", st.session_state['profil_db'], default=st.session_state['profil_db'][:2])
         
-        if st.form_submit_button("🚀 Generate Modul Ajar"):
-            if not topik:
-                st.warning("Topik wajib diisi!")
-            else:
-                with st.spinner("Sedang membuat RPP..."):
-                    res = generate_rpp_content(active_model, mapel, topik, kelas, waktu, profil)
-                    if res:
-                        data = {'guru':nama_guru, 'sekolah':nama_sekolah, 'kepsek':nama_kepsek, 'mapel':mapel, 'kelas':kelas, 'waktu':waktu, 'profil':profil}
-                        docx = create_docx(data, res)
-                        st.success("Selesai!")
-                        st.download_button("📥 Download Word", docx, f"Modul_{mapel}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                        st.json(res)
+        submitted = st.form_submit_button("🚀 Generate Modul Ajar")
+
+    if submitted:
+        if not active_model:
+             st.error("❌ API Key tidak valid atau belum diganti. Silakan ganti API Key di kode.")
+        elif not topik:
+            st.warning("Topik wajib diisi!")
+        else:
+            with st.spinner("Sedang membuat RPP..."):
+                res = generate_rpp_content(active_model, mapel, topik, kelas, waktu, profil)
+                if res:
+                    data = {'guru':nama_guru, 'sekolah':nama_sekolah, 'kepsek':nama_kepsek, 'mapel':mapel, 'kelas':kelas, 'waktu':waktu, 'profil':profil}
+                    docx = create_docx(data, res)
+                    st.success("Selesai!")
+                    st.download_button("📥 Download Word", docx, f"Modul_{mapel}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 # --- 8. DATABASE PROFIL ---
 def page_profil():
