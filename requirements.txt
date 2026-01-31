@@ -1,5 +1,3 @@
 streamlit
 google-generativeai
 python-docx
-streamlit
-python-docx
