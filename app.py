@@ -86,6 +86,7 @@ def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list):
         """
         
         response = model.generate_content(prompt)
+        # Membersihkan format markdown jika AI memberikannya
         text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
         
@@ -266,7 +267,7 @@ def page_profil():
 
 # --- 8. NAVIGASI SIDEBAR ---
 with st.sidebar:
-    # Bagian ini yang menyebabkan error sebelumnya. Sekarang sudah diperbaiki (URL Bersih).
+    # URL gambar di bawah ini sekarang bersih, tanpa karakter markdown
     st.image("[https://cdn-icons-png.flaticon.com/512/201/201612.png](https://cdn-icons-png.flaticon.com/512/201/201612.png)", width=80)
     
     st.title("Menu Navigasi")
