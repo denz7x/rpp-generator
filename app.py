@@ -266,7 +266,7 @@ def page_profil():
 
 # --- 8. NAVIGASI SIDEBAR ---
 with st.sidebar:
-    # --- PERBAIKAN: HANYA URL MURNI, JANGAN PAKAI FORMAT MARKDOWN ---
+    # Bagian ini yang menyebabkan error sebelumnya. Sekarang sudah diperbaiki (URL Bersih).
     st.image("[https://cdn-icons-png.flaticon.com/512/201/201612.png](https://cdn-icons-png.flaticon.com/512/201/201612.png)", width=80)
     
     st.title("Menu Navigasi")
