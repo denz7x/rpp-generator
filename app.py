@@ -1,13 +1,14 @@
 import streamlit as st
 from datetime import datetime
 import io
+# Pastikan library python-docx sudah terinstall
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(
-    page_title="Generator RPP Profesional",
+    page_title="Generator RPP Deep Learning",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -45,14 +46,12 @@ def generate_rpp_docx(data):
     
     doc.add_paragraph("") # Spasi
 
-    # Tabel Identitas (Agar rapi sejajar)
+    # Tabel Identitas
     table = doc.add_table(rows=4, cols=3)
     table.autofit = False
-    
-    # Mengatur lebar kolom (Approximation)
-    table.columns[0].width = Inches(1.5) # Label
-    table.columns[1].width = Inches(0.2) # Separator (:)
-    table.columns[2].width = Inches(4.0) # Isi
+    table.columns[0].width = Inches(1.5) 
+    table.columns[1].width = Inches(0.2) 
+    table.columns[2].width = Inches(4.0) 
 
     def fill_row(row_idx, label, value):
         table.cell(row_idx, 0).text = label
@@ -64,7 +63,7 @@ def generate_rpp_docx(data):
     fill_row(2, "Kelas / Semester", data['kelas'])
     fill_row(3, "Alokasi Waktu", data['waktu'])
     
-    doc.add_paragraph("") # Spasi
+    doc.add_paragraph("") 
 
     # A. Tujuan
     doc.add_heading('A. Tujuan Pembelajaran', level=1)
@@ -106,23 +105,20 @@ def generate_rpp_docx(data):
     doc.add_paragraph("")
     doc.add_paragraph("")
 
-    # Tanda Tangan (Menggunakan Tabel agar Kanan-Kiri rapi)
+    # Tanda Tangan
     sig_table = doc.add_table(rows=1, cols=2)
     sig_table.autofit = True
     
-    # Cell Kiri (Kepsek)
     cell_kepsek = sig_table.cell(0, 0)
     p_kepsek = cell_kepsek.paragraphs[0]
     p_kepsek.add_run(f"Mengetahui,\nKepala Sekolah\n\n\n\n\n{data['kepsek']}").bold = True
     p_kepsek.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # Cell Kanan (Guru)
     cell_guru = sig_table.cell(0, 1)
     p_guru = cell_guru.paragraphs[0]
     p_guru.add_run(f"Guru Mata Pelajaran\n\n\n\n\n\n{data['guru']}").bold = True
     p_guru.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # Simpan ke Buffer Memori
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -131,8 +127,18 @@ def generate_rpp_docx(data):
 # --- FUNGSI HALAMAN UTAMA ---
 def show_home():
     st.title("📚 Generator RPP Terintegrasi")
+    
+    # === [UPDATE] RUNNING TEXT DITAMBAHKAN DI SINI ===
+    st.markdown("""
+        <marquee direction="left" scrollamount="8" style="color: red; font-weight: bold; font-size: 16px;">
+        Aplikasi ini dibuat oleh Ceng Ucu Muhammad, S.H - SMP IT Nurusy Syifa
+        </marquee>
+    """, unsafe_allow_html=True)
+    # ==================================================
+
     st.markdown("---")
     
+    # --- FORMULIR ---
     with st.form("rpp_form"):
         st.subheader("1. Identitas")
         c1, c2 = st.columns(2)
@@ -165,36 +171,36 @@ def show_home():
             pengetahuan = st.text_input("Penilaian Pengetahuan")
             keterampilan = st.text_input("Penilaian Keterampilan")
 
+        # Tombol Submit Form
         submitted = st.form_submit_button("🚀 Generate RPP")
 
-        if submitted:
-            # Kumpulkan data dalam dictionary
-            data_rpp = {
-                'guru': nama_guru, 'sekolah': nama_sekolah, 'kepsek': kepala_sekolah,
-                'mapel': mata_pelajaran, 'kelas': kelas_semester, 'waktu': alokasi_waktu,
-                'profil': profil_terpilih, 'tujuan': tujuan, 'materi': materi,
-                'pendahuluan': pendahuluan, 'inti': inti, 'penutup': penutup,
-                'sikap': sikap, 'pengetahuan': pengetahuan, 'keterampilan': keterampilan
-            }
-            
-            st.success("RPP Berhasil Dibuat! Silakan download di bawah ini.")
-            
-            # Buat file Word di memori
-            docx_file = generate_rpp_docx(data_rpp)
-            
-            # Tombol Download
-            st.download_button(
-                label="📥 Download RPP (.docx)",
-                data=docx_file,
-                file_name=f"RPP_{mata_pelajaran}_{kelas_semester}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-            
-            # Tampilkan Preview Singkat
-            st.markdown("---")
-            st.markdown("### Preview Hasil")
-            st.write(f"**Tujuan:** {tujuan}")
-            st.write(f"**Profil:** {', '.join(profil_terpilih)}")
+    # --- LOGIKA DI LUAR FORM (AGAR TIDAK ERROR) ---
+    if submitted:
+        data_rpp = {
+            'guru': nama_guru, 'sekolah': nama_sekolah, 'kepsek': kepala_sekolah,
+            'mapel': mata_pelajaran, 'kelas': kelas_semester, 'waktu': alokasi_waktu,
+            'profil': profil_terpilih, 'tujuan': tujuan, 'materi': materi,
+            'pendahuluan': pendahuluan, 'inti': inti, 'penutup': penutup,
+            'sikap': sikap, 'pengetahuan': pengetahuan, 'keterampilan': keterampilan
+        }
+        
+        st.success("RPP Berhasil Dibuat! Silakan download di bawah ini.")
+        
+        # Buat file Word
+        docx_file = generate_rpp_docx(data_rpp)
+        
+        # Tombol Download
+        st.download_button(
+            label="📥 Download RPP (.docx)",
+            data=docx_file,
+            file_name=f"RPP_{mata_pelajaran}_{kelas_semester}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        
+        st.markdown("---")
+        st.markdown("### Preview Hasil")
+        st.write(f"**Tujuan:** {tujuan}")
+        st.write(f"**Profil:** {', '.join(profil_terpilih)}")
 
 def show_profil_lulusan():
     st.title("🎓 Kelola Profil Lulusan")
@@ -224,4 +230,8 @@ with st.sidebar:
 
 if menu == "📝 Buat RPP": show_home()
 elif menu == "🎓 Database Profil": show_profil_lulusan()
-elif menu == "ℹ️ Tentang": st.write("Generator RPP v3 (Support Docx)")
+elif menu == "ℹ️ Tentang":
+    st.title("Tentang")
+    # Teks credit juga bisa ditaruh di sini jika mau
+    st.write("Aplikasi Generator RPP v4.0")
+    st.write("Dibuat oleh Ceng Ucu Muhammad, S.H - SMP IT Nurusy Syifa")
