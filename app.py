@@ -6,10 +6,11 @@ from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# --- 1. KONFIGURASI API KEY (HARDCODED) ---
+# --- 1. KONFIGURASI API KEY ---
+# Kode ini sudah otomatis pakai API Key Anda
 MY_API_KEY = "AIzaSyDm4BXch5vuDdl5jodG4xUx78-4iqdX0r0"
 
-# --- 2. KONFIGURASI HALAMAN & CSS ---
+# --- 2. SETUP HALAMAN ---
 st.set_page_config(
     page_title="AI Modul Ajar Generator",
     page_icon="🎓",
@@ -17,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# CSS Agar Tampilan Bagus
 st.markdown("""
 <style>
     .main { background-color: #f8f9fa; }
@@ -30,9 +31,6 @@ st.markdown("""
         color: white;
     }
     .stButton>button:hover { background-color: #45a049; }
-    h1, h2, h3 { color: #2c3e50; font-family: 'Segoe UI', sans-serif; }
-    .stTextInput>div>div>input { border-radius: 8px; }
-    
     .running-text-container {
         background-color: #ffe6e6; 
         padding: 10px; 
@@ -43,7 +41,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. DATABASE SEMENTARA ---
+# --- 3. DATABASE PROFIL ---
 if 'profil_db' not in st.session_state:
     st.session_state['profil_db'] = [
         "Beriman, Bertakwa kepada Tuhan YME, dan Berakhlak Mulia",
@@ -54,7 +52,7 @@ if 'profil_db' not in st.session_state:
         "Kreatif"
     ]
 
-# --- 4. FUNGSI AI GENERATOR ---
+# --- 4. FUNGSI AI ---
 def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list):
     try:
         genai.configure(api_key=MY_API_KEY)
@@ -63,38 +61,36 @@ def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list):
         profil_str = ", ".join(profil_list)
         
         prompt = f"""
-        Bertindaklah sebagai Guru Profesional Kurikulum Merdeka. 
-        Buatkan konten Modul Ajar/RPP lengkap dalam format JSON.
+        Buatkan Modul Ajar/RPP Kurikulum Merdeka format JSON.
         
-        Data:
+        Info:
         - Mapel: {mapel}
         - Kelas: {kelas}
         - Topik: {topik}
         - Waktu: {waktu}
         - Profil: {profil_str}
 
-        Output WAJIB JSON valid (tanpa markdown ```json):
+        Output WAJIB JSON MURNI (tanpa ```json):
         {{
-            "tujuan": "2-3 tujuan pembelajaran spesifik & terukur.",
+            "tujuan": "Tujuan pembelajaran.",
             "pemahaman": "Pertanyaan pemantik.",
-            "pendahuluan": "Poin kegiatan pendahuluan (apersepsi).",
-            "inti": "Langkah kegiatan inti detail (Model PBL/PjBL).",
-            "penutup": "Refleksi dan penutup.",
-            "asesmen": "Teknik penilaian (Sikap, Pengetahuan, Keterampilan)."
+            "pendahuluan": "Kegiatan awal.",
+            "inti": "Kegiatan inti detail.",
+            "penutup": "Kegiatan penutup.",
+            "asesmen": "Penilaian."
         }}
-        Gunakan Bahasa Indonesia formal.
+        Bahasa Indonesia formal.
         """
         
         response = model.generate_content(prompt)
-        # Membersihkan format markdown jika AI memberikannya
         text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
         
     except Exception as e:
-        st.error(f"Error AI: {str(e)}")
+        st.error(f"Error pada AI: {str(e)}")
         return None
 
-# --- 5. FUNGSI PEMBUAT DOCX ---
+# --- 5. FUNGSI WORD (DOCX) ---
 def create_docx(data_input, ai_data):
     doc = Document()
     
@@ -128,14 +124,11 @@ def create_docx(data_input, ai_data):
     if data_input['profil']:
         for p in data_input['profil']:
             doc.add_paragraph(f"- {p}", style='List Bullet')
-    else:
-        doc.add_paragraph("-")
 
     doc.add_heading('C. Pemahaman Bermakna', level=1)
     doc.add_paragraph(ai_data.get('pemahaman', '-'))
 
     doc.add_heading('D. Kegiatan Pembelajaran', level=1)
-    
     p = doc.add_paragraph()
     p.add_run("1. Pendahuluan").bold = True
     doc.add_paragraph(ai_data.get('pendahuluan', '-'))
@@ -170,10 +163,11 @@ def create_docx(data_input, ai_data):
     buffer.seek(0)
     return buffer
 
-# --- 6. HALAMAN UTAMA ---
+# --- 6. HALAMAN GENERATOR ---
 def page_generator():
     st.title("📚 Generator Modul Ajar Otomatis")
     
+    # Running Text
     st.markdown("""
         <div class="running-text-container">
             <marquee direction="left" scrollamount="8" style="color: red; font-weight: bold; font-size: 16px;">
@@ -182,8 +176,6 @@ def page_generator():
         </div>
     """, unsafe_allow_html=True)
     
-    model_choice = "gemini-1.5-flash" 
-
     with st.form("main_form"):
         st.subheader("1. Identitas Sekolah")
         c1, c2, c3 = st.columns(3)
@@ -205,20 +197,20 @@ def page_generator():
 
         st.subheader("3. Profil Lulusan")
         profil_pilihan = st.multiselect(
-            "Pilih Profil yang dikuatkan:", 
+            "Pilih Profil:", 
             options=st.session_state['profil_db'],
             default=st.session_state['profil_db'][:2] 
         )
         
         st.markdown("---")
-        submitted = st.form_submit_button("🚀 Generate Modul Ajar (AI)")
+        submitted = st.form_submit_button("🚀 Generate Modul Ajar")
 
     if submitted:
         if not topik or not mapel:
-            st.error("❌ Mohon isi Mata Pelajaran dan Topik Materi!")
+            st.error("❌ Mohon isi Mapel dan Topik!")
         else:
-            with st.spinner("🤖 AI sedang menyusun RPP... Mohon tunggu..."):
-                ai_result = generate_rpp_content(model_choice, mapel, topik, kelas, waktu, profil_pilihan)
+            with st.spinner("🤖 AI sedang bekerja..."):
+                ai_result = generate_rpp_content("gemini-1.5-flash", mapel, topik, kelas, waktu, profil_pilihan)
                 
                 if ai_result:
                     data_input = {
@@ -226,63 +218,46 @@ def page_generator():
                         'mapel': mapel, 'kelas': kelas, 'waktu': waktu,
                         'profil': profil_pilihan
                     }
-                    
                     docx_file = create_docx(data_input, ai_result)
                     
-                    st.success("✅ Berhasil! Dokumen siap diunduh.")
-                    
+                    st.success("✅ Selesai! Silakan download.")
                     st.download_button(
-                        label="📥 Download Modul Ajar (.docx)",
+                        label="📥 Download (.docx)",
                         data=docx_file,
-                        file_name=f"Modul_Ajar_{mapel}_{kelas}.docx",
+                        file_name=f"Modul_{mapel}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     )
-                    
-                    with st.expander("👁️ Lihat Preview Isi"):
-                        st.write("**Tujuan:**", ai_result.get('tujuan'))
-                        st.write("**Kegiatan Inti:**", ai_result.get('inti'))
+                    with st.expander("Lihat Hasil"):
+                        st.write(ai_result)
 
-# --- 7. HALAMAN DATABASE PROFIL ---
+# --- 7. HALAMAN PROFIL ---
 def page_profil():
-    st.title("🎓 Database Profil Lulusan")
+    st.title("🎓 Database Profil")
+    new_item = st.text_input("Tambah Profil Baru")
+    if st.button("Tambah"):
+        if new_item:
+            st.session_state['profil_db'].append(new_item)
+            st.success("OK")
     
-    c_in, c_btn = st.columns([3, 1])
-    with c_in:
-        new_item = st.text_input("Tambah Profil Baru")
-    with c_btn:
-        st.write("")
-        st.write("")
-        if st.button("➕ Tambah"):
-            if new_item:
-                st.session_state['profil_db'].append(new_item)
-                st.success("OK")
-    
-    st.markdown("### Daftar Profil:")
     for i, item in enumerate(st.session_state['profil_db']):
         c1, c2 = st.columns([4, 1])
-        c1.info(item)
+        c1.text(item)
         if c2.button("Hapus", key=f"del_{i}"):
             st.session_state['profil_db'].pop(i)
             st.rerun()
 
-# --- 8. NAVIGASI SIDEBAR ---
+# --- 8. NAVIGASI ---
 with st.sidebar:
-    # URL gambar di bawah ini sekarang bersih, tanpa karakter markdown
-    st.image("[https://cdn-icons-png.flaticon.com/512/201/201612.png](https://cdn-icons-png.flaticon.com/512/201/201612.png)", width=80)
-    
-    st.title("Menu Navigasi")
+    st.title("Menu Aplikasi")
+    # SAYA HAPUS GAMBARNYA SUPAYA TIDAK ERROR LAGI
+    st.write("---")
     menu = st.radio("Pilih Halaman:", ["📝 Buat Modul Ajar", "🎓 Database Profil", "ℹ️ Tentang"])
-    
-    st.markdown("---")
-    st.caption("Status AI: ✅ Terhubung")
 
-# --- 9. ROUTING ---
 if menu == "📝 Buat Modul Ajar":
     page_generator()
 elif menu == "🎓 Database Profil":
     page_profil()
 elif menu == "ℹ️ Tentang":
-    st.title("Tentang Aplikasi")
-    st.write("Generator Modul Ajar AI (Versi Auto-Key)")
-    st.write("Developer: Ceng Ucu Muhammad, S.H")
-    st.write("Instansi: SMP IT Nurusy Syifa")
+    st.title("Tentang")
+    st.write("Dibuat oleh: Ceng Ucu Muhammad, S.H")
+    st.write("SMP IT Nurusy Syifa")
