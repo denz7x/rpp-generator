@@ -1,155 +1,227 @@
 import streamlit as st
-import google.generativeai as genai
-from docx import Document
+from datetime import datetime
 import io
+from docx import Document
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# --- 1. KONFIGURASI API KEY (Menggunakan Secrets) ---
-try:
-    # Mengambil API Key dari Secrets Streamlit Cloud
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-    genai.configure(api_key=GOOGLE_API_KEY)
-except Exception as e:
-    st.error("⚠️ API Key belum diatur di Secrets Streamlit Cloud.")
-    st.stop()
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(
+    page_title="Generator RPP Profesional",
+    page_icon="📚",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-st.set_page_config(page_title="Generator Modul Ajar", page_icon="📚")
+# --- CUSTOM CSS ---
+def local_css():
+    st.markdown("""
+    <style>
+    .main { background-color: #f8f9fa; }
+    .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- 2. FUNGSI PEMBUAT WORD ---
-def create_docx(text_content, mapel, topik):
+local_css()
+
+# --- DATABASE SEMENTARA ---
+if 'profil_lulusan_db' not in st.session_state:
+    st.session_state['profil_lulusan_db'] = [
+        "Beriman, Bertakwa kepada Tuhan YME, dan Berakhlak Mulia",
+        "Berkebinekaan Global",
+        "Bergotong Royong",
+        "Mandiri",
+        "Bernalar Kritis",
+        "Kreatif"
+    ]
+
+# --- FUNGSI GENERATE WORD (DOCX) ---
+def generate_rpp_docx(data):
     doc = Document()
-    doc.add_heading(f'Modul Ajar - {mapel}', 0)
-    doc.add_heading(f'Topik: {topik}', level=1)
     
-    # Menambahkan isi dari AI ke dokumen
-    # Catatan: Ini akan masuk sebagai teks biasa. 
-    doc.add_paragraph(text_content)
+    # Judul
+    heading = doc.add_heading('RENCANA PELAKSANAAN PEMBELAJARAN (RPP)', 0)
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    doc.add_paragraph('\n\nDicetak otomatis oleh Generator RPP AI.')
-    
-    # Simpan ke memori (buffer) agar bisa didownload
-    bio = io.BytesIO()
-    doc.save(bio)
-    bio.seek(0)
-    return bio
+    doc.add_paragraph("") # Spasi
 
-# --- 3. SISTEM PENCARI MODEL OTOMATIS ---
-st.sidebar.header("⚙️ Pengaturan AI")
-try:
-    available_models = []
-    # Mencari model yang mendukung generateContent
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            available_models.append(m.name)
-            
-    # Prioritaskan model flash jika ada (lebih cepat)
-    default_index = 0
-    for i, model_name in enumerate(available_models):
-        if "flash" in model_name:
-            default_index = i
-            break
+    # Tabel Identitas (Agar rapi sejajar)
+    table = doc.add_table(rows=4, cols=3)
+    table.autofit = False
+    
+    # Mengatur lebar kolom (Approximation)
+    table.columns[0].width = Inches(1.5) # Label
+    table.columns[1].width = Inches(0.2) # Separator (:)
+    table.columns[2].width = Inches(4.0) # Isi
 
-    if available_models:
-        selected_model = st.sidebar.selectbox("Model AI:", available_models, index=default_index)
-        model = genai.GenerativeModel(selected_model)
-        st.sidebar.success(f"✅ Aktif: {selected_model}")
+    def fill_row(row_idx, label, value):
+        table.cell(row_idx, 0).text = label
+        table.cell(row_idx, 1).text = ":"
+        table.cell(row_idx, 2).text = value
+
+    fill_row(0, "Nama Sekolah", data['sekolah'])
+    fill_row(1, "Mata Pelajaran", data['mapel'])
+    fill_row(2, "Kelas / Semester", data['kelas'])
+    fill_row(3, "Alokasi Waktu", data['waktu'])
+    
+    doc.add_paragraph("") # Spasi
+
+    # A. Tujuan
+    doc.add_heading('A. Tujuan Pembelajaran', level=1)
+    doc.add_paragraph(data['tujuan'])
+
+    # B. Profil Lulusan
+    doc.add_heading('B. Profil Lulusan / Profil Pelajar Pancasila', level=1)
+    if data['profil']:
+        for item in data['profil']:
+            p = doc.add_paragraph(item, style='List Bullet')
     else:
-        st.sidebar.error("❌ Tidak ada model AI yang ditemukan.")
-        st.stop()
+        doc.add_paragraph("-")
 
-except Exception as e:
-    st.sidebar.warning(f"Gagal memuat daftar model otomatis. Menggunakan default. Error: {e}")
-    model = genai.GenerativeModel('gemini-1.5-flash') # Fallback manual
+    # C. Materi
+    doc.add_heading('C. Materi Pokok', level=1)
+    doc.add_paragraph(data['materi'])
 
-# --- 4. TAMPILAN APLIKASI ---
-st.markdown(
-    """
-    <div style='text-align: center; background-color: #007bff; padding: 20px; border-radius: 10px; margin-bottom: 20px;'>
-        <h2 style='color: white; margin: 0; font-size: 26px;'>
-            📚 Generator Perencanaan Pembelajaran Mendalam 📚
-        </h2>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-st.markdown("Buat Modul Ajar/RPP lalu download file Word-nya.")
-st.markdown(
-    """
-    <div style='background-color: #ffe6e6; padding: 8px; border-radius: 5px;'>
-        <marquee direction='left' scrollamount='6' style='color: red; font-weight: bold; font-size: 16px;'>
-            Oleh : Ceng Ucu Muhammad, S.H - SMP IT NURUSY-SYIFA.
-        </marquee>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    # D. Kegiatan
+    doc.add_heading('D. Kegiatan Pembelajaran', level=1)
+    
+    p_pend = doc.add_paragraph()
+    p_pend.add_run("1. Pendahuluan").bold = True
+    doc.add_paragraph(data['pendahuluan'])
+    
+    p_inti = doc.add_paragraph()
+    p_inti.add_run("2. Kegiatan Inti").bold = True
+    doc.add_paragraph(data['inti'])
+    
+    p_penutup = doc.add_paragraph()
+    p_penutup.add_run("3. Penutup").bold = True
+    doc.add_paragraph(data['penutup'])
 
-# Form Input
-st.header("1. Informasi Umum")
-col1, col2 = st.columns(2)
-with col1:
-    mapel = st.text_input("Mata Pelajaran", placeholder="Contoh: IPA")
-    jenjang = st.selectbox("Jenjang", ["PAUD", "SD/MI", "SMP/MTs", "SMA/MA", "SMK"])
-with col2:
-    kelas = st.text_input("Kelas", placeholder="Contoh: 7")
-    semester = st.selectbox("Semester", ["Ganjil", "Genap"])
+    # E. Penilaian
+    doc.add_heading('E. Penilaian', level=1)
+    doc.add_paragraph(f"Sikap: {data['sikap']}")
+    doc.add_paragraph(f"Pengetahuan: {data['pengetahuan']}")
+    doc.add_paragraph(f"Keterampilan: {data['keterampilan']}")
 
-durasi = st.text_input("Durasi Waktu", placeholder="Contoh: 2 x 45 menit")
+    doc.add_paragraph("")
+    doc.add_paragraph("")
 
-st.header("2. Detail Pembelajaran")
-topik = st.text_input("Topik Materi (Wajib)", placeholder="Masukan topik materi...")
-tp = st.text_area("Tujuan Pembelajaran (Opsional)", height=100)
-metode = st.multiselect("Metode Pembelajaran", ["PBL", "PjBL", "Discovery Learning", "Diskusi", "Ceramah"])
-lkpd = st.radio("Buatkan Lampiran LKPD?", ["Ya", "Tidak"])
+    # Tanda Tangan (Menggunakan Tabel agar Kanan-Kiri rapi)
+    sig_table = doc.add_table(rows=1, cols=2)
+    sig_table.autofit = True
+    
+    # Cell Kiri (Kepsek)
+    cell_kepsek = sig_table.cell(0, 0)
+    p_kepsek = cell_kepsek.paragraphs[0]
+    p_kepsek.add_run(f"Mengetahui,\nKepala Sekolah\n\n\n\n\n{data['kepsek']}").bold = True
+    p_kepsek.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-# Tombol Eksekusi
-if st.button("🚀 Buat Modul Ajar", type="primary"):
-    if not mapel or not topik:
-        st.warning("⚠️ Mohon lengkapi Mata Pelajaran dan Topik Materi!")
-    else:
-        with st.spinner("Sedang meracik Modul Ajar... (Tunggu ya)"):
-            # Prompt disesuaikan agar outputnya lebih bersih untuk Word
-            prompt = f"""
-            Buatkan Modul Ajar lengkap (RPP) untuk:
-            Mapel: {mapel}, Kelas: {kelas}, Topik: {topik}.
-            Metode: {', '.join(metode)}.
+    # Cell Kanan (Guru)
+    cell_guru = sig_table.cell(0, 1)
+    p_guru = cell_guru.paragraphs[0]
+    p_guru.add_run(f"Guru Mata Pelajaran\n\n\n\n\n\n{data['guru']}").bold = True
+    p_guru.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Simpan ke Buffer Memori
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# --- FUNGSI HALAMAN UTAMA ---
+def show_home():
+    st.title("📚 Generator RPP Terintegrasi")
+    st.markdown("---")
+    
+    with st.form("rpp_form"):
+        st.subheader("1. Identitas")
+        c1, c2 = st.columns(2)
+        with c1:
+            nama_guru = st.text_input("Nama Guru")
+            nama_sekolah = st.text_input("Nama Sekolah")
+            kepala_sekolah = st.text_input("Nama Kepala Sekolah")
+        with c2:
+            mata_pelajaran = st.text_input("Mata Pelajaran")
+            kelas_semester = st.selectbox("Kelas / Semester", ["VII / Ganjil", "VII / Genap", "VIII / Ganjil", "VIII / Genap", "IX / Ganjil", "IX / Genap", "X / Ganjil", "X / Genap", "XI / Ganjil", "XI / Genap", "XII / Ganjil", "XII / Genap"])
+            alokasi_waktu = st.text_input("Alokasi Waktu (Misal: 2 JP)")
+
+        st.subheader("2. Komponen Inti")
+        st.markdown("##### 🌱 Profil Lulusan")
+        profil_terpilih = st.multiselect("Pilih Profil:", options=st.session_state['profil_lulusan_db'])
+        
+        c3, c4 = st.columns(2)
+        with c3:
+            tujuan = st.text_area("Tujuan Pembelajaran", height=100)
+        with c4:
+            materi = st.text_area("Materi Pokok", height=100)
+
+        with st.expander("📝 Kegiatan Pembelajaran"):
+            pendahuluan = st.text_area("Pendahuluan")
+            inti = st.text_area("Inti")
+            penutup = st.text_area("Penutup")
+
+        with st.expander("📊 Penilaian"):
+            sikap = st.text_input("Penilaian Sikap")
+            pengetahuan = st.text_input("Penilaian Pengetahuan")
+            keterampilan = st.text_input("Penilaian Keterampilan")
+
+        submitted = st.form_submit_button("🚀 Generate RPP")
+
+        if submitted:
+            # Kumpulkan data dalam dictionary
+            data_rpp = {
+                'guru': nama_guru, 'sekolah': nama_sekolah, 'kepsek': kepala_sekolah,
+                'mapel': mata_pelajaran, 'kelas': kelas_semester, 'waktu': alokasi_waktu,
+                'profil': profil_terpilih, 'tujuan': tujuan, 'materi': materi,
+                'pendahuluan': pendahuluan, 'inti': inti, 'penutup': penutup,
+                'sikap': sikap, 'pengetahuan': pengetahuan, 'keterampilan': keterampilan
+            }
             
-            Kelengkapan:
-            1. Informasi Umum (Identitas Sekolah, Profil Pelajar Pancasila)
-            2. Komponen Inti (Tujuan, Pemahaman Bermakna, Pertanyaan Pemantik)
-            3. Langkah Pembelajaran (Pendahuluan, Inti, Penutup)
-            4. Asesmen
-            5. {lkpd} buatkan lampiran soal LKPD.
-
-            Tuliskan isinya secara terstruktur tanpa menggunakan terlalu banyak format Markdown (seperti bold/italic) agar rapi saat dicetak ke Word.
-            """
+            st.success("RPP Berhasil Dibuat! Silakan download di bawah ini.")
             
-            try:
-                # Minta AI berpikir
-                response = model.generate_content(prompt)
-                rpp_text = response.text
-                
-                # Tampilkan di layar
-                st.success("Selesai! Silakan baca di bawah atau download file-nya.")
-                st.markdown("---")
-                
-                # --- FITUR DOWNLOAD TOMBOL ---
-                # Panggil fungsi pembuat docx
-                docx_file = create_docx(rpp_text, mapel, topik)
-                
-                st.download_button(
-                    label="📄 Download File Word (.docx)",
-                    data=docx_file,
-                    file_name=f"Modul_Ajar_{mapel}_{topik}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-                
-                st.markdown("---")
-                st.text_area("Preview Hasil:", value=rpp_text, height=400)
-                
-            except Exception as e:
-                st.error(f"Terjadi kesalahan: {e}")
+            # Buat file Word di memori
+            docx_file = generate_rpp_docx(data_rpp)
+            
+            # Tombol Download
+            st.download_button(
+                label="📥 Download RPP (.docx)",
+                data=docx_file,
+                file_name=f"RPP_{mata_pelajaran}_{kelas_semester}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            
+            # Tampilkan Preview Singkat
+            st.markdown("---")
+            st.markdown("### Preview Hasil")
+            st.write(f"**Tujuan:** {tujuan}")
+            st.write(f"**Profil:** {', '.join(profil_terpilih)}")
 
+def show_profil_lulusan():
+    st.title("🎓 Kelola Profil Lulusan")
+    col_input, col_btn = st.columns([3, 1])
+    with col_input:
+        new_profil = st.text_input("Tambah Profil Baru")
+    with col_btn:
+        st.write("")
+        st.write("")
+        if st.button("Tambah"):
+            if new_profil:
+                st.session_state['profil_lulusan_db'].append(new_profil)
+                st.success("Ditambahkan.")
+    
+    for i, profil in enumerate(st.session_state['profil_lulusan_db']):
+        c_txt, c_del = st.columns([4, 1])
+        with c_txt: st.info(profil)
+        with c_del: 
+            if st.button("Hapus", key=f"del_{i}"):
+                st.session_state['profil_lulusan_db'].pop(i)
+                st.rerun()
 
+# --- NAVIGASI ---
+with st.sidebar:
+    st.title("Navigasi")
+    menu = st.radio("Menu", ["📝 Buat RPP", "🎓 Database Profil", "ℹ️ Tentang"])
 
-
-
+if menu == "📝 Buat RPP": show_home()
+elif menu == "🎓 Database Profil": show_profil_lulusan()
+elif menu == "ℹ️ Tentang": st.write("Generator RPP v3 (Support Docx)")
