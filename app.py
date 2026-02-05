@@ -10,7 +10,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 # 1. KONFIGURASI API KEY (WAJIB DIGANTI!)
 # ==========================================
 # Tempel API Key BARU Bapak di dalam tanda kutip di bawah ini:
-MY_API_KEY = "AIzaSyBNML1Sxl73d2H8-AMsHKQm1RryGH1YRWc"
+MY_API_KEY = "AIzaSyCXYRPTEuFVrDXL0EXXrI04Ii_n2GKBnLs"
 
 # Konfigurasi Awal
 try:
@@ -619,3 +619,4 @@ with st.sidebar:
 
 # Jalankan halaman yang dipilih
 menu_options[menu_selection]()
+
