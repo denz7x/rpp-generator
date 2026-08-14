@@ -257,11 +257,28 @@ def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list, pa
         Gunakan Bahasa Indonesia formal pendidikan.
         """
         
-        response = model.generate_content(prompt)
+        response = model.generate_content(
+            prompt,
+            request_options={"timeout": 60},  # Batas tunggu 60 detik, biar tidak muter selamanya
+        )
         text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
+    except json.JSONDecodeError:
+        st.error(
+            "⚠️ AI mengembalikan format yang tidak sesuai (bukan JSON murni). "
+            "Coba klik tombol Generate sekali lagi."
+        )
+        return None
     except Exception as e:
-        st.error(f"Gagal Generate: {str(e)}")
+        pesan = str(e)
+        if "timeout" in pesan.lower() or "deadline" in pesan.lower():
+            st.error(
+                "⚠️ Permintaan ke server AI terlalu lama (timeout 60 detik). "
+                "Kemungkinan koneksi lambat atau server Google sedang sibuk. "
+                "Coba klik Generate lagi."
+            )
+        else:
+            st.error(f"Gagal Generate: {pesan}")
         return None
 
 # C. Fungsi Membuat Word (Rapi dengan Tabel)
