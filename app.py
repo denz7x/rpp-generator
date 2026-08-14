@@ -7,16 +7,35 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # ==========================================
-# 1. KONFIGURASI API KEY (WAJIB DIGANTI!)
+# 1. KONFIGURASI API KEY
 # ==========================================
-# Tempel API Key BARU Bapak di dalam tanda kutip di bawah ini:
-MY_API_KEY = "AIzaSyCXYRPTEuFVrDXL0EXXrI04Ii_n2GKBnLs"
+# API Key TIDAK ditulis langsung di kode ini (supaya aman kalau file
+# di-share/di-upload). Key diambil dari Streamlit Secrets.
+#
+# CARA MENGISI:
+# - Di Streamlit Cloud: buka menu app -> Settings -> Secrets, lalu isi:
+#       GOOGLE_API_KEY = "AIzaSy...isi_key_baru_di_sini..."
+# - Kalau jalan di komputer sendiri (lokal): buat file
+#       .streamlit/secrets.toml
+#   di folder yang sama dengan app.py, isinya:
+#       GOOGLE_API_KEY = "AIzaSy...isi_key_baru_di_sini..."
+try:
+    MY_API_KEY = st.secrets["GOOGLE_API_KEY"]
+except Exception:
+    MY_API_KEY = None
+    st.error(
+        "⚠️ API Key belum diatur. Tambahkan GOOGLE_API_KEY di menu "
+        "Settings → Secrets (Streamlit Cloud), atau di file "
+        ".streamlit/secrets.toml (kalau dijalankan lokal)."
+    )
+    st.stop()
 
 # Konfigurasi Awal
 try:
     genai.configure(api_key=MY_API_KEY)
 except Exception as e:
     st.error(f"Error Konfigurasi: {e}")
+    st.stop()
 
 # ==========================================
 # 2. PENGATURAN TAMPILAN (UI) MODERN
@@ -182,15 +201,30 @@ def get_available_model():
                 available_models.append(m.name)
         
         if not available_models: return None
-        # Prioritas model (urutan dari yang paling disarankan)
-        if "models/gemini-2.0-flash" in available_models: return "models/gemini-2.0-flash"
-        if "models/gemini-1.5-flash" in available_models: return "models/gemini-1.5-flash"
-        if "models/gemini-1.5-pro" in available_models: return "models/gemini-1.5-pro"
+        # Prioritas model (urutan dari yang paling disarankan, per Agustus 2026)
+        # Cek versi terbaru dulu, lalu turun ke versi lama sebagai cadangan.
+        prioritas = [
+            "models/gemini-3.7-flash",
+            "models/gemini-3.6-flash",
+            "models/gemini-3.5-flash-lite",
+            "models/gemini-2.5-flash",
+            "models/gemini-2.5-flash-lite",
+            "models/gemini-1.5-flash",
+        ]
+        for nama in prioritas:
+            if nama in available_models:
+                return nama
+        # Kalau tidak ada satupun yang cocok, pakai model pertama yang
+        # benar-benar dilaporkan aktif oleh Google saat ini (bukan hardcode).
         return available_models[0]
     except Exception as e:
-        # Jangan hardcode ke model yang sudah deprecated (gemini-pro).
-        # Kalau gagal ambil daftar model, pakai fallback yang masih aktif per 2026.
-        return "models/gemini-2.0-flash"
+        # PENTING: jangan hardcode fallback ke nama model spesifik di sini.
+        # Model yang "aman" hari ini bisa saja sudah dimatikan Google minggu depan
+        # (seperti yang barusan terjadi pada gemini-pro lalu gemini-2.0-flash).
+        # Lebih baik gagal dengan jelas supaya masalah aslinya (API key/koneksi)
+        # ketahuan, daripada diam-diam menembak model yang mungkin sudah mati.
+        st.error(f"Gagal mengambil daftar model dari Google: {e}")
+        return None
 
 # B. Fungsi Generate Konten AI
 def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list, pakai_lkpd):
