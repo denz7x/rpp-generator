@@ -22,7 +22,7 @@ except Exception as e:
 # 2. PENGATURAN TAMPILAN (UI) MODERN
 # ==========================================
 st.set_page_config(
-    page_title="Generator Modul Ajar Pro",
+    page_title="Generator RPP & MODUL AJAR",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -558,7 +558,8 @@ def page_tentang():
         ### 👨‍💻 Pengembang:
         **Nama:** Ceng Ucu Muhammad, S.H  
         **Instansi:** SMP IT Nurusy Syifa  
-        **Email:** [email Anda]  
+        **Email:** [elmangliddenz@gmail.com]  
+        **No WA:** 085742587993
         **Versi:** 2.0.0
         
         ### 📞 Support:
