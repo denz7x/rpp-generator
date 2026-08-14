@@ -182,12 +182,15 @@ def get_available_model():
                 available_models.append(m.name)
         
         if not available_models: return None
-        # Prioritas model
+        # Prioritas model (urutan dari yang paling disarankan)
+        if "models/gemini-2.0-flash" in available_models: return "models/gemini-2.0-flash"
         if "models/gemini-1.5-flash" in available_models: return "models/gemini-1.5-flash"
-        if "models/gemini-pro" in available_models: return "models/gemini-pro"
+        if "models/gemini-1.5-pro" in available_models: return "models/gemini-1.5-pro"
         return available_models[0]
-    except:
-        return "models/gemini-pro"
+    except Exception as e:
+        # Jangan hardcode ke model yang sudah deprecated (gemini-pro).
+        # Kalau gagal ambil daftar model, pakai fallback yang masih aktif per 2026.
+        return "models/gemini-2.0-flash"
 
 # B. Fungsi Generate Konten AI
 def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list, pakai_lkpd):
@@ -620,4 +623,3 @@ with st.sidebar:
 
 # Jalankan halaman yang dipilih
 menu_options[menu_selection]()
-
