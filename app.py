@@ -199,33 +199,33 @@ def create_docx(data_input, ai_data, pakai_lkpd):
     doc = Document()
     
     # --- 1. KOP SURAT ---
-    paragraph = doc.add_paragraph()
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    # Tambahkan Logo (Opsional: taruh file 'logo.png' di folder yang sama)
-    # try: paragraph.add_run().add_picture('logo.png', width=Inches(0.8)) 
-    # except: pass
-    
-    run1 = paragraph.add_run("YAYASAN NURUSY-SYIFA AL-ISLAMI\n")
+    style = doc.styles['Normal']
+    style.font.name = 'Times New Roman'
+    style.font.size = Pt(12)
+
+    kop = doc.add_paragraph()
+    kop.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run1 = kop.add_run("YAYASAN NURUSY-SYIFA AL-ISLAMI\n")
     run1.bold = True
-    run1.font.size = Pt(12)
-    
-    run2 = paragraph.add_run("SMP IT NURUSY - SYIFA\n")
+    run1.font.size = Pt(14)
+    run2 = kop.add_run("SMP IT NURUSY - SYIFA\n")
     run2.bold = True
-    run2.font.size = Pt(16)
-    
-    run3 = paragraph.add_run("Sistem Administrasi Guru (SIAGA NUFA)")
+    run2.font.size = Pt(18)
+    run3 = kop.add_run("Sistem Administrasi Guru (SIAGA NUFA)")
     run3.font.size = Pt(10)
     
-    # Garis Pembatas
+    # Garis bawah kop
     doc.add_paragraph("_________________________________________________________________________________")
     
     # --- 2. JUDUL ---
+    doc.add_paragraph("\n")
     head = doc.add_heading('MODUL AJAR KURIKULUM MERDEKA', 0)
     head.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
+    doc.add_paragraph("\n")
+
     # --- 3. TABEL IDENTITAS ---
     table = doc.add_table(rows=5, cols=3)
-    table.columns[0].width = Inches(2.0)
+    table.autofit = True
     
     data_identitas = [
         ("Nama Sekolah", data_input['sekolah']),
@@ -236,41 +236,52 @@ def create_docx(data_input, ai_data, pakai_lkpd):
     ]
     
     for i, (label, val) in enumerate(data_identitas):
-        table.cell(i,0).text = label
+        table.cell(i,0).paragraphs[0].add_run(label).bold = True
         table.cell(i,1).text = ":"
         table.cell(i,2).text = val
-    
+        
     doc.add_paragraph("\n")
 
-    # --- 4. ISI DOKUMEN ---
-    section_map = [
-        ("A. IDENTITAS MODUL", None),
-        ("B. KOMPETENSI AWAL", ai_data.get('kompetensi_awal')),
-        ("C. PROFIL PELAJAR PANCASILA", ", ".join(data_input['profil'])),
-        ("D. SARANA DAN PRASARANA", ai_data.get('sarana')),
-        ("E. TARGET PESERTA DIDIK", ai_data.get('target')),
-        ("F. MODEL PEMBELAJARAN", ai_data.get('model')),
-        ("G. KOMPONEN INTI", None),
-        ("1. TUJUAN PEMBELAJARAN", ai_data.get('tujuan')),
-        ("2. PEMAHAMAN BERMAKNA", ai_data.get('pemahaman')),
-        ("3. PERTANYAAN PEMANTIK", ai_data.get('pertanyaan_pemantik')),
-        ("4. KEGIATAN PEMBELAJARAN", f"Pendahuluan:\n{ai_data.get('pendahuluan')}\n\nInti:\n{ai_data.get('inti')}\n\nPenutup:\n{ai_data.get('penutup')}"),
-        ("5. REFLEKSI", ai_data.get('refleksi')),
-        ("6. ASESMEN / PENILAIAN", ai_data.get('asesmen'))
-    ]
-    
-    for title, content in section_map:
-        doc.add_heading(title, level=1)
-        if content:
-            doc.add_paragraph(content)
+    # --- 4. ISI DOKUMEN (Dengan spasi rapi) ---
+    def add_formal_section(title, content):
+        h = doc.add_heading(title, level=1)
+        h.bold = True
+        p = doc.add_paragraph(content if content else "-")
+        p.paragraph_format.space_after = Pt(15) # Beri jarak antar section
 
-    # --- 5. TTD ---
+    add_formal_section('A. Tujuan Pembelajaran', ai_data.get('tujuan'))
+    
+    p_profil = doc.add_paragraph()
+    p_profil.add_run('B. Profil Pelajar Pancasila').bold = True
+    for p in data_input['profil']: 
+        doc.add_paragraph(f"- {p}", style='List Bullet')
+    doc.add_paragraph("\n")
+        
+    add_formal_section('C. Pemahaman Bermakna', ai_data.get('pemahaman'))
+    
+    doc.add_heading('D. Kegiatan Pembelajaran', level=1)
+    doc.add_paragraph("1. Pendahuluan").bold = True
+    doc.add_paragraph(ai_data.get('pendahuluan', '-'))
+    doc.add_paragraph("2. Kegiatan Inti").bold = True
+    doc.add_paragraph(ai_data.get('inti', '-'))
+    doc.add_paragraph("3. Kegiatan Penutup").bold = True
+    doc.add_paragraph(ai_data.get('penutup', '-'))
+    doc.add_paragraph("\n")
+    
+    add_formal_section('E. Asesmen / Penilaian', ai_data.get('asesmen'))
+
+    # --- 5. TANDA TANGAN ---
     doc.add_paragraph("\n\n")
-    ttd = doc.add_table(rows=1, cols=2)
-    ttd.cell(0,0).text = f"Mengetahui,\nKepala Sekolah\n\n\n\n\n{data_input['kepsek']}"
-    ttd.cell(0,1).text = f"Guru Mata Pelajaran\n\n\n\n\n{data_input['guru']}"
-    for cell in ttd.rows[0].cells:
-        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    ttd_table = doc.add_table(rows=1, cols=2)
+    ttd_table.autofit = True
+    
+    c1 = ttd_table.cell(0,0)
+    c1.text = f"Mengetahui,\nKepala Sekolah\n\n\n\n( {data_input['kepsek']} )"
+    c1.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    c2 = ttd_table.cell(0,1)
+    c2.text = f"Guru Mata Pelajaran\n\n\n\n( {data_input['guru']} )"
+    c2.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # --- 6. LAMPIRAN ---
     if pakai_lkpd == "Ya" and ai_data.get('lkpd'):
@@ -282,7 +293,6 @@ def create_docx(data_input, ai_data, pakai_lkpd):
     doc.save(buffer)
     buffer.seek(0)
     return buffer
-
 # ==========================================
 # 5. ANTARMUKA UTAMA (UI)
 # ==========================================
