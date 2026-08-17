@@ -32,23 +32,24 @@ st.set_page_config(
     page_title="EduGen Pro",
     page_icon="🚀",
     layout="wide",
-    initial_sidebar_state="collapsed" # Sengaja disembunyikan di awal agar layar HP lega
+    initial_sidebar_state="collapsed" # Sengaja disembunyikan agar layar HP lega
 )
 
 # CSS KHUSUS UNTUK MEMBUNUH FRAME STREAMLIT & MENGUBAH TEMA
 st.markdown("""
 <style>
-    /* 1. MENGHILANGKAN FRAME, HEADER, FOOTER BAWAAN STREAMLIT (FULLSCREEN MODE) */
-    header[data-testid="stHeader"] { display: none !important; }
-    footer { display: none !important; }
-    .stAppBottomBlockContainer { display: none !important; }
-    .viewerBadge_container__1QSob { display: none !important; }
+    /* 1. MENGHILANGKAN FRAME, HEADER, FOOTER BAWAAN STREAMLIT SECARA PAKSA */
+    [data-testid="stHeader"] { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    [data-testid="stDecoration"] { display: none !important; }
+    [data-testid="stStatusWidget"] { display: none !important; }
     #MainMenu { display: none !important; }
+    footer { display: none !important; }
     
     /* 2. MENGHAPUS JARAK KOSONG DI ATAS DAN KIRI KANAN PADA HP */
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 0rem !important;
+        padding-bottom: 1rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         max-width: 100% !important;
@@ -59,7 +60,7 @@ st.markdown("""
         background-color: #f0f4f8;
     }
 
-    /* 4. HEADER UTAMA (Lebih kecil dan rapi di HP) */
+    /* 4. HEADER UTAMA */
     .header-container {
         background: linear-gradient(135deg, #4338ca 0%, #3b82f6 50%, #06b6d4 100%);
         padding: 1.2rem 1rem;
@@ -70,7 +71,7 @@ st.markdown("""
         box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
     }
     
-    /* 5. KARTU (CARDS) COLORFUL UNTUK SETIAP BAGIAN */
+    /* 5. KARTU (CARDS) COLORFUL */
     .stCard {
         padding: 1.2rem;
         border-radius: 16px;
@@ -78,14 +79,11 @@ st.markdown("""
         box-shadow: 0 4px 10px rgba(0,0,0,0.05);
         border: 1px solid rgba(255,255,255,0.6);
     }
-    /* Warna Kotak Identitas (Biru Muda Pastel) */
     .card-biru { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); border-left: 5px solid #0ea5e9; }
-    /* Warna Kotak Parameter (Ungu Muda Pastel) */
     .card-ungu { background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); border-left: 5px solid #a855f7; }
-    /* Warna Kotak Informasi (Hijau/Cyan Muda Pastel) */
     .card-cyan { background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%); border-left: 5px solid #14b8a6; }
 
-    /* 6. TOMBOL GENERATE (Tegas & Menonjol) */
+    /* 6. TOMBOL GENERATE */
     button[kind="primary"] {
         background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important;
         color: white !important;
@@ -94,21 +92,16 @@ st.markdown("""
         padding: 0.6rem 2rem !important;
         font-weight: bold !important;
         box-shadow: 0 8px 15px rgba(37, 99, 235, 0.3) !important;
-        transition: transform 0.2s ease !important;
-    }
-    button[kind="primary"]:active {
-        transform: scale(0.95) !important;
     }
 
-    /* 7. KOTAK INPUT (Biar nyatu dengan kotak warna-warni) */
+    /* 7. KOTAK INPUT */
     .stTextInput>div>div>input, .stSelectbox>div>div>select, .stMultiSelect>div>div>div {
         background-color: rgba(255, 255, 255, 0.9) !important;
         border-radius: 10px !important;
         border: 1px solid rgba(0,0,0,0.1) !important;
-        padding: 0.5rem !important;
     }
-
-    /* 8. TABS (Menu Atas) */
+    
+    /* 8. TABS */
     .stTabs [data-baseweb="tab-list"] {
         background-color: white;
         border-radius: 12px;
@@ -198,12 +191,41 @@ def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list, pa
 
 def create_docx(data_input, ai_data, pakai_lkpd):
     doc = Document()
-    head = doc.add_heading('MODUL AJAR / RPP', 0)
-    head.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    doc.add_paragraph("")
+    
+    # ==========================================
+    # 1. KOP SURAT SEKOLAH
+    # ==========================================
+    kop = doc.add_paragraph()
+    kop.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    run_yayasan = kop.add_run("YAYASAN NURUSY-SYIFA AL-ISLAMI\n")
+    run_yayasan.bold = True
+    run_yayasan.font.size = Pt(12)
+    
+    run_sekolah = kop.add_run("SMP IT NURUSY - SYIFA\n")
+    run_sekolah.bold = True
+    run_sekolah.font.size = Pt(16)
+    
+    run_alamat = kop.add_run("Sistem Administrasi Guru (SIAGA NUFA)\n(Dokumen ini digenerate secara otomatis melalui sistem EduGen Pro)")
+    run_alamat.font.size = Pt(9)
+    
+    # Garis Bawah Kop Surat (Pembatas)
+    garis = doc.add_paragraph("_________________________________________________________________________________")
+    garis.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    garis.paragraph_format.space_after = Pt(12)
 
+    # ==========================================
+    # 2. JUDUL DOKUMEN
+    # ==========================================
+    head = doc.add_heading('MODUL AJAR / RPP', level=1)
+    head.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph("") # Spasi kosong
+
+    # ==========================================
+    # 3. TABEL IDENTITAS (Rapi dan Sejajar)
+    # ==========================================
     table = doc.add_table(rows=5, cols=3)
-    table.columns[0].width = Inches(1.5)
+    table.columns[0].width = Inches(1.8)
     table.columns[1].width = Inches(0.2)
     table.columns[2].width = Inches(4.5)
     
@@ -211,43 +233,80 @@ def create_docx(data_input, ai_data, pakai_lkpd):
         ("Nama Sekolah", data_input['sekolah']),
         ("Nama Guru", data_input['guru']),
         ("Mata Pelajaran", data_input['mapel']),
-        ("Kelas/Semester", data_input['kelas']),
+        ("Kelas / Semester", data_input['kelas']),
         ("Alokasi Waktu", data_input['waktu'])
     ]
     
     for i, (label, val) in enumerate(infos):
-        table.cell(i,0).text = label
+        # Set teks tebal pada label kiri
+        cell_label = table.cell(i,0).paragraphs[0]
+        cell_label.add_run(label).bold = True
+        
         table.cell(i,1).text = ":"
         table.cell(i,2).text = val
+        
+        # Merapatkan jarak antar baris tabel
+        table.cell(i,0).paragraphs[0].paragraph_format.space_after = Pt(3)
+        table.cell(i,2).paragraphs[0].paragraph_format.space_after = Pt(3)
 
+    doc.add_paragraph("\n")
+
+    # ==========================================
+    # 4. FUNGSI PEMBANTU ISI MODUL
+    # ==========================================
     def add_section(title, content):
-        doc.add_heading(title, level=1)
+        p_title = doc.add_paragraph()
+        p_title.add_run(title).bold = True
         doc.add_paragraph(content if content else "-")
 
     add_section('A. Tujuan Pembelajaran', ai_data.get('tujuan'))
-    doc.add_heading('B. Profil Pelajar Pancasila', level=1)
-    for p in data_input['profil']: doc.add_paragraph(f"- {p}", style='List Bullet')
+    
+    p_profil = doc.add_paragraph()
+    p_profil.add_run('B. Profil Pelajar Pancasila').bold = True
+    for p in data_input['profil']: 
+        doc.add_paragraph(f"{p}", style='List Bullet')
+        
     add_section('C. Pemahaman Bermakna', ai_data.get('pemahaman'))
     
-    doc.add_heading('D. Kegiatan Pembelajaran', level=1)
+    p_kegiatan = doc.add_paragraph()
+    p_kegiatan.add_run('D. Kegiatan Pembelajaran').bold = True
+    
     doc.add_paragraph("1. Pendahuluan").bold = True
     doc.add_paragraph(ai_data.get('pendahuluan', '-'))
+    
     doc.add_paragraph("2. Kegiatan Inti").bold = True
     doc.add_paragraph(ai_data.get('inti', '-'))
+    
     doc.add_paragraph("3. Kegiatan Penutup").bold = True
     doc.add_paragraph(ai_data.get('penutup', '-'))
+    
     add_section('E. Asesmen / Penilaian', ai_data.get('asesmen'))
 
-    doc.add_paragraph("\n\n")
+    # ==========================================
+    # 5. TANDA TANGAN KEPSEK & GURU
+    # ==========================================
+    doc.add_paragraph("\n")
     sig_table = doc.add_table(rows=1, cols=2)
-    sig_table.cell(0,0).text = f"Mengetahui,\nKepala Sekolah\n\n\n\n{data_input['kepsek']}"
-    sig_table.cell(0,0).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-    sig_table.cell(0,1).text = f"Guru Mata Pelajaran\n\n\n\n{data_input['guru']}"
-    sig_table.cell(0,1).paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sig_table.autofit = True
+    
+    cell_kepsek = sig_table.cell(0,0)
+    cell_kepsek.text = f"Mengetahui,\nKepala Sekolah\n\n\n\n\n( {data_input['kepsek']} )"
+    cell_kepsek.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    cell_guru = sig_table.cell(0,1)
+    cell_guru.text = f"Guru Mata Pelajaran\n\n\n\n\n( {data_input['guru']} )"
+    cell_guru.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
+    # ==========================================
+    # 6. LAMPIRAN LKPD (JIKA DIPILIH)
+    # ==========================================
     if pakai_lkpd == "Ya" and ai_data.get('lkpd'):
         doc.add_page_break()
-        doc.add_heading('LAMPIRAN: LKPD', 0)
+        head_lkpd = doc.add_heading('LAMPIRAN: LEMBAR KERJA PESERTA DIDIK (LKPD)', 0)
+        head_lkpd.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph("\nNama Siswa : ...................................")
+        doc.add_paragraph(f"Kelas      : {data_input['kelas']}")
+        doc.add_paragraph("_________________________________________________________________________________")
         doc.add_paragraph(ai_data.get('lkpd'))
 
     buffer = io.BytesIO()
@@ -258,11 +317,11 @@ def create_docx(data_input, ai_data, pakai_lkpd):
 # ==========================================
 # 5. ANTARMUKA UTAMA (UI)
 # ==========================================
-# Bagian Judul (Ukurannya pas untuk HP)
+# Bagian Judul
 st.markdown("""
 <div class="header-container">
     <h1 style="margin: 0; font-size: 1.6rem; font-weight: 800; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">🚀 EduGen Pro</h1>
-    <p style="margin: 0.2rem 0 0 0; font-size: 0.85rem; font-weight: 500;">Penyusun Modul Ajar Cerdas</p>
+    <p style="margin: 0.2rem 0 0 0; font-size: 0.85rem; font-weight: 500;">Penyusun Modul Ajar & LKPD Cerdas</p>
     <div style="margin-top: 8px; font-size: 0.75rem; background: rgba(0,0,0,0.15); padding: 4px 10px; border-radius: 20px; display: inline-block;">
         Ceng Ucu Muhammad, S.H - SMP IT Nurusy Syifa
     </div>
@@ -276,14 +335,12 @@ tab1, tab2, tab3 = st.tabs(["📝 Form RPP", "👁️ Hasil", "⚙️ DB Profil"
 
 # --- TAB 1: INPUT DATA ---
 with tab1:
-    # KOTAK 1: BIRU MUDA (Identitas)
     st.markdown('<div class="stCard card-biru"><h4 style="margin-top:0; color:#0369a1;">🧑‍🏫 Identitas Guru</h4>', unsafe_allow_html=True)
     nama_guru = st.text_input("Nama Guru", placeholder="Cth: Ceng Ucu, S.H")
     nama_sekolah = st.text_input("Sekolah", value="SMP IT Nurusy Syifa")
     nama_kepsek = st.text_input("Kepala Sekolah", placeholder="Cth: Ahmad, M.Pd")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # KOTAK 2: UNGU MUDA (Parameter)
     st.markdown('<div class="stCard card-ungu"><h4 style="margin-top:0; color:#7e22ce;">📚 Parameter Modul</h4>', unsafe_allow_html=True)
     mapel = st.text_input("Mata Pelajaran", value="Ilmu Pengetahuan Sosial (IPS)")
     kelas = st.selectbox("Kelas", ["VII (Fase D)", "VIII (Fase D)", "IX (Fase D)"], index=0)
@@ -293,7 +350,6 @@ with tab1:
     pilihan_lkpd = st.radio("Buat LKPD Otomatis?", ["Tidak", "Ya"], horizontal=True)
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # TOMBOL GENERATE
     submitted = st.button("🚀 GENERATE SEKARANG", use_container_width=True, type="primary")
 
 # --- TAB 2: PREVIEW HASIL ---
