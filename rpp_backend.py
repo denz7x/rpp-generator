@@ -37,7 +37,7 @@ from docx_helpers import ModulTable, style_run, add_paragraph_in_cell, add_botto
 
 try:
     import google.generativeai as genai
-except ImportError:  # supaya modul ini tetap bisa dites tanpa lib genai
+except ImportError:
     genai = None
 
 
@@ -134,9 +134,15 @@ Keluarkan HANYA JSON murni (tanpa markdown, tanpa penjelasan tambahan), dengan s
 
 def _call_gemini_json(model_name, prompt):
     model = genai.GenerativeModel(model_name)
+    # PERBAIKAN UTAMA: Memaksa Gemini untuk selalu merespons dengan JSON MURNI
+    generation_config = genai.GenerationConfig(
+        response_mime_type="application/json",
+        temperature=0.7,
+        max_output_tokens=8192
+    )
     response = model.generate_content(
         prompt,
-        generation_config={"max_output_tokens": 8192, "temperature": 0.7},
+        generation_config=generation_config,
         request_options={"timeout": 90},
     )
     text = _clean_json(response.text)
@@ -147,7 +153,8 @@ def generate_bagian_umum(model_name, ctx):
     prompt = PROMPT_BAGIAN_UMUM.format(ctx=_ctx_block(ctx))
     try:
         return _call_gemini_json(model_name, prompt)
-    except Exception:
+    except Exception as e:
+        print(f"Error pada generate_bagian_umum: {e}")
         return None
 
 
@@ -155,7 +162,8 @@ def generate_asesmen_lampiran(model_name, ctx):
     prompt = PROMPT_ASESMEN_LAMPIRAN.format(ctx=_ctx_block(ctx))
     try:
         return _call_gemini_json(model_name, prompt)
-    except Exception:
+    except Exception as e:
+        print(f"Error pada generate_asesmen_lampiran: {e}")
         return None
 
 
