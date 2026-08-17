@@ -165,22 +165,28 @@ def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list, pa
         model = genai.GenerativeModel(model_name)
         profil_str = ", ".join(profil_list)
         
-        instruksi_lkpd = "Sertakan materi untuk LKPD (3-5 soal/aktivitas)." if pakai_lkpd == "Ya" else ""
-        json_structure_lkpd = ', "lkpd": "Isi detail LKPD (Soal/Aktivitas)."' if pakai_lkpd == "Ya" else ""
-
         prompt = f"""
-        Buatkan Modul Ajar Kurikulum Merdeka format JSON.
-        Mapel {mapel}, Kelas {kelas}, Topik {topik}, Waktu {waktu}, Profil {profil_str}.
-        {instruksi_lkpd}
-        Output JSON MURNI:
+        Buatkan Modul Ajar Kurikulum Merdeka format JSON yang SANGAT LENGKAP untuk:
+        Mapel: {mapel}, Kelas: {kelas}, Topik: {topik}, Waktu: {waktu}.
+        
+        Isi konten harus mencakup:
+        1. Tujuan Pembelajaran.
+        2. Kompetensi Awal.
+        3. Sarana Prasarana (Sebutkan alat/media).
+        4. Target Peserta Didik (Reguler, Tinggi).
+        5. Model Pembelajaran (Tatap Muka/Resitasi/dll).
+        6. Pertanyaan Pemantik.
+        7. Kegiatan Pembelajaran (Pendahuluan, Inti, Penutup - Detail).
+        8. Refleksi Guru & Siswa.
+        9. Asesmen/Penilaian (Sikap, Pengetahuan, Keterampilan).
+        10. Lampiran LKPD (Jika diminta).
+
+        Output WAJIB JSON MURNI (tanpa markdown):
         {{
-            "tujuan": "Tujuan (poin-poin).",
-            "pemahaman": "Pertanyaan pemantik.",
-            "pendahuluan": "Awal (poin-poin).",
-            "inti": "Inti (poin-poin).",
-            "penutup": "Penutup (poin-poin).",
-            "asesmen": "Penilaian."
-            {json_structure_lkpd}
+            "tujuan": "...", "kompetensi_awal": "...", "sarana": "...", "target": "...", "model": "...",
+            "pemahaman": "...", "pertanyaan_pemantik": "...", 
+            "pendahuluan": "...", "inti": "...", "penutup": "...", 
+            "refleksi": "...", "asesmen": "...", "lkpd": "..."
         }}
         """
         response = model.generate_content(prompt, request_options={"timeout": 60})
@@ -192,44 +198,36 @@ def generate_rpp_content(model_name, mapel, topik, kelas, waktu, profil_list, pa
 def create_docx(data_input, ai_data, pakai_lkpd):
     doc = Document()
     
-    # ==========================================
-    # 1. KOP SURAT SEKOLAH
-    # ==========================================
-    kop = doc.add_paragraph()
-    kop.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # --- 1. KOP SURAT ---
+    paragraph = doc.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # Tambahkan Logo (Opsional: taruh file 'logo.png' di folder yang sama)
+    # try: paragraph.add_run().add_picture('logo.png', width=Inches(0.8)) 
+    # except: pass
     
-    run_yayasan = kop.add_run("YAYASAN NURUSY-SYIFA AL-ISLAMI\n")
-    run_yayasan.bold = True
-    run_yayasan.font.size = Pt(12)
+    run1 = paragraph.add_run("YAYASAN NURUSY-SYIFA AL-ISLAMI\n")
+    run1.bold = True
+    run1.font.size = Pt(12)
     
-    run_sekolah = kop.add_run("SMP IT NURUSY - SYIFA\n")
-    run_sekolah.bold = True
-    run_sekolah.font.size = Pt(16)
+    run2 = paragraph.add_run("SMP IT NURUSY - SYIFA\n")
+    run2.bold = True
+    run2.font.size = Pt(16)
     
-    run_alamat = kop.add_run("Sistem Administrasi Guru (SIAGA NUFA)\n(Dokumen ini digenerate secara otomatis melalui sistem EduGen Pro)")
-    run_alamat.font.size = Pt(9)
+    run3 = paragraph.add_run("Sistem Administrasi Guru (SIAGA NUFA)")
+    run3.font.size = Pt(10)
     
-    # Garis Bawah Kop Surat (Pembatas)
-    garis = doc.add_paragraph("_________________________________________________________________________________")
-    garis.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    garis.paragraph_format.space_after = Pt(12)
-
-    # ==========================================
-    # 2. JUDUL DOKUMEN
-    # ==========================================
-    head = doc.add_heading('MODUL AJAR / RPP', level=1)
+    # Garis Pembatas
+    doc.add_paragraph("_________________________________________________________________________________")
+    
+    # --- 2. JUDUL ---
+    head = doc.add_heading('MODUL AJAR KURIKULUM MERDEKA', 0)
     head.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    doc.add_paragraph("") # Spasi kosong
-
-    # ==========================================
-    # 3. TABEL IDENTITAS (Rapi dan Sejajar)
-    # ==========================================
-    table = doc.add_table(rows=5, cols=3)
-    table.columns[0].width = Inches(1.8)
-    table.columns[1].width = Inches(0.2)
-    table.columns[2].width = Inches(4.5)
     
-    infos = [
+    # --- 3. TABEL IDENTITAS ---
+    table = doc.add_table(rows=5, cols=3)
+    table.columns[0].width = Inches(2.0)
+    
+    data_identitas = [
         ("Nama Sekolah", data_input['sekolah']),
         ("Nama Guru", data_input['guru']),
         ("Mata Pelajaran", data_input['mapel']),
@@ -237,76 +235,47 @@ def create_docx(data_input, ai_data, pakai_lkpd):
         ("Alokasi Waktu", data_input['waktu'])
     ]
     
-    for i, (label, val) in enumerate(infos):
-        # Set teks tebal pada label kiri
-        cell_label = table.cell(i,0).paragraphs[0]
-        cell_label.add_run(label).bold = True
-        
+    for i, (label, val) in enumerate(data_identitas):
+        table.cell(i,0).text = label
         table.cell(i,1).text = ":"
         table.cell(i,2).text = val
-        
-        # Merapatkan jarak antar baris tabel
-        table.cell(i,0).paragraphs[0].paragraph_format.space_after = Pt(3)
-        table.cell(i,2).paragraphs[0].paragraph_format.space_after = Pt(3)
-
+    
     doc.add_paragraph("\n")
 
-    # ==========================================
-    # 4. FUNGSI PEMBANTU ISI MODUL
-    # ==========================================
-    def add_section(title, content):
-        p_title = doc.add_paragraph()
-        p_title.add_run(title).bold = True
-        doc.add_paragraph(content if content else "-")
+    # --- 4. ISI DOKUMEN ---
+    section_map = [
+        ("A. IDENTITAS MODUL", None),
+        ("B. KOMPETENSI AWAL", ai_data.get('kompetensi_awal')),
+        ("C. PROFIL PELAJAR PANCASILA", ", ".join(data_input['profil'])),
+        ("D. SARANA DAN PRASARANA", ai_data.get('sarana')),
+        ("E. TARGET PESERTA DIDIK", ai_data.get('target')),
+        ("F. MODEL PEMBELAJARAN", ai_data.get('model')),
+        ("G. KOMPONEN INTI", None),
+        ("1. TUJUAN PEMBELAJARAN", ai_data.get('tujuan')),
+        ("2. PEMAHAMAN BERMAKNA", ai_data.get('pemahaman')),
+        ("3. PERTANYAAN PEMANTIK", ai_data.get('pertanyaan_pemantik')),
+        ("4. KEGIATAN PEMBELAJARAN", f"Pendahuluan:\n{ai_data.get('pendahuluan')}\n\nInti:\n{ai_data.get('inti')}\n\nPenutup:\n{ai_data.get('penutup')}"),
+        ("5. REFLEKSI", ai_data.get('refleksi')),
+        ("6. ASESMEN / PENILAIAN", ai_data.get('asesmen'))
+    ]
+    
+    for title, content in section_map:
+        doc.add_heading(title, level=1)
+        if content:
+            doc.add_paragraph(content)
 
-    add_section('A. Tujuan Pembelajaran', ai_data.get('tujuan'))
-    
-    p_profil = doc.add_paragraph()
-    p_profil.add_run('B. Profil Pelajar Pancasila').bold = True
-    for p in data_input['profil']: 
-        doc.add_paragraph(f"{p}", style='List Bullet')
-        
-    add_section('C. Pemahaman Bermakna', ai_data.get('pemahaman'))
-    
-    p_kegiatan = doc.add_paragraph()
-    p_kegiatan.add_run('D. Kegiatan Pembelajaran').bold = True
-    
-    doc.add_paragraph("1. Pendahuluan").bold = True
-    doc.add_paragraph(ai_data.get('pendahuluan', '-'))
-    
-    doc.add_paragraph("2. Kegiatan Inti").bold = True
-    doc.add_paragraph(ai_data.get('inti', '-'))
-    
-    doc.add_paragraph("3. Kegiatan Penutup").bold = True
-    doc.add_paragraph(ai_data.get('penutup', '-'))
-    
-    add_section('E. Asesmen / Penilaian', ai_data.get('asesmen'))
+    # --- 5. TTD ---
+    doc.add_paragraph("\n\n")
+    ttd = doc.add_table(rows=1, cols=2)
+    ttd.cell(0,0).text = f"Mengetahui,\nKepala Sekolah\n\n\n\n\n{data_input['kepsek']}"
+    ttd.cell(0,1).text = f"Guru Mata Pelajaran\n\n\n\n\n{data_input['guru']}"
+    for cell in ttd.rows[0].cells:
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # ==========================================
-    # 5. TANDA TANGAN KEPSEK & GURU
-    # ==========================================
-    doc.add_paragraph("\n")
-    sig_table = doc.add_table(rows=1, cols=2)
-    sig_table.autofit = True
-    
-    cell_kepsek = sig_table.cell(0,0)
-    cell_kepsek.text = f"Mengetahui,\nKepala Sekolah\n\n\n\n\n( {data_input['kepsek']} )"
-    cell_kepsek.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    cell_guru = sig_table.cell(0,1)
-    cell_guru.text = f"Guru Mata Pelajaran\n\n\n\n\n( {data_input['guru']} )"
-    cell_guru.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    # ==========================================
-    # 6. LAMPIRAN LKPD (JIKA DIPILIH)
-    # ==========================================
+    # --- 6. LAMPIRAN ---
     if pakai_lkpd == "Ya" and ai_data.get('lkpd'):
         doc.add_page_break()
-        head_lkpd = doc.add_heading('LAMPIRAN: LEMBAR KERJA PESERTA DIDIK (LKPD)', 0)
-        head_lkpd.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        doc.add_paragraph("\nNama Siswa : ...................................")
-        doc.add_paragraph(f"Kelas      : {data_input['kelas']}")
-        doc.add_paragraph("_________________________________________________________________________________")
+        doc.add_heading('LAMPIRAN: LEMBAR KERJA PESERTA DIDIK (LKPD)', 0)
         doc.add_paragraph(ai_data.get('lkpd'))
 
     buffer = io.BytesIO()
