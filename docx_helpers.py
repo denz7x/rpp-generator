@@ -1,0 +1,231 @@
+"""
+Helper functions untuk membangun dokumen .docx bergaya
+'MODUL AJAR KURIKULUM MERDEKA' resmi Kemendikbud, menggunakan python-docx.
+
+Semua fungsi di sini murni manipulasi python-docx (tidak butuh Streamlit / AI),
+sehingga bisa dites terpisah dengan data dummy.
+"""
+
+from docx import Document
+from docx.shared import Pt, Cm, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+HEADER_FILL = "D9D9D9"   # abu-abu, sama seperti dokumen contoh
+WHITE_FILL = "FFFFFF"
+FONT_NAME = "Times New Roman"
+FONT_SIZE = 11
+
+
+# ----------------------------------------------------------------------
+# UTILITAS TINGKAT RENDAH (OXML)
+# ----------------------------------------------------------------------
+
+def set_cell_background(cell, hex_color):
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement('w:shd')
+    shd.set(qn('w:val'), 'clear')
+    shd.set(qn('w:color'), 'auto')
+    shd.set(qn('w:fill'), hex_color)
+    tcPr.append(shd)
+
+
+def set_table_borders(table, size=4, color="000000"):
+    tbl = table._tbl
+    tblPr = tbl.tblPr
+    borders = OxmlElement('w:tblBorders')
+    for edge in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        el = OxmlElement(f'w:{edge}')
+        el.set(qn('w:val'), 'single')
+        el.set(qn('w:sz'), str(size))
+        el.set(qn('w:space'), '0')
+        el.set(qn('w:color'), color)
+        borders.append(el)
+    tblPr.append(borders)
+
+
+def set_col_widths(table, widths_cm):
+    """widths_cm: list lebar kolom dalam cm. Perlu diset di setiap row/cell."""
+    table.autofit = False
+    for row in table.rows:
+        for idx, cell in enumerate(row.cells):
+            if idx < len(widths_cm):
+                cell.width = Cm(widths_cm[idx])
+
+
+def add_bottom_border(paragraph, size=12, color="000000"):
+    """Menambahkan garis horizontal (border bawah) pada sebuah paragraf kosong."""
+    pPr = paragraph._p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    bottom = OxmlElement('w:bottom')
+    bottom.set(qn('w:val'), 'single')
+    bottom.set(qn('w:sz'), str(size))
+    bottom.set(qn('w:space'), '1')
+    bottom.set(qn('w:color'), color)
+    pBdr.append(bottom)
+    pPr.append(pBdr)
+
+
+def set_repeat_table_header(row):
+    """Menandai baris sebagai header yang berulang di setiap halaman."""
+    tr = row._tr
+    trPr = tr.get_or_add_trPr()
+    tblHeader = OxmlElement('w:tblHeader')
+    tblHeader.set(qn('w:val'), "true")
+    trPr.append(tblHeader)
+
+
+def style_run(run, bold=False, italic=False, size=FONT_SIZE, color=None):
+    run.font.name = FONT_NAME
+    run.font.size = Pt(size)
+    run.bold = bold
+    run.italic = italic
+    if color:
+        run.font.color.rgb = RGBColor.from_string(color)
+    # Pastikan font timur (east asian) juga ikut, biar konsisten di semua platform
+    rPr = run._element.get_or_add_rPr()
+    rFonts = rPr.find(qn('w:rFonts'))
+    if rFonts is None:
+        rFonts = OxmlElement('w:rFonts')
+        rPr.append(rFonts)
+    rFonts.set(qn('w:eastAsia'), FONT_NAME)
+
+
+def add_paragraph_in_cell(cell, text="", bold=False, italic=False, size=FONT_SIZE,
+                           align=None, space_after=4, first=False, bullet_style=None):
+    """Tambahkan paragraf ke dalam cell tabel. Jika first=True, pakai paragraf
+    kosong pertama yang sudah ada di cell alih-alih membuat baru."""
+    if first and len(cell.paragraphs) == 1 and cell.paragraphs[0].text == "":
+        p = cell.paragraphs[0]
+    else:
+        p = cell.add_paragraph()
+    if bullet_style:
+        p.style = bullet_style
+    if align:
+        p.alignment = align
+    p.paragraph_format.space_after = Pt(space_after)
+    if text:
+        run = p.add_run(text)
+        style_run(run, bold=bold, italic=italic, size=size)
+    return p
+
+
+# ----------------------------------------------------------------------
+# BUILDER TABEL UTAMA (satu tabel besar 2 kolom, mirip dokumen resmi)
+# ----------------------------------------------------------------------
+
+class ModulTable:
+    """
+    Wrapper di sekitar satu docx table 2-kolom yang dipakai untuk seluruh
+    badan modul ajar (INFORMASI UMUM, KOMPONEN INTI, LAMPIRAN), meniru gaya
+    dokumen resmi Kemendikbud: baris header abu-abu + baris label:value +
+    baris konten bebas (paragraf/bullet/tabel bersarang).
+    """
+
+    def __init__(self, doc, col_widths_cm=(4.5, 12.0)):
+        self.doc = doc
+        self.col_widths_cm = col_widths_cm
+        self.table = doc.add_table(rows=1, cols=2)
+        self.table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        set_table_borders(self.table)
+        set_col_widths(self.table, col_widths_cm)
+        # baris pertama dibuang penggunaannya nanti (kita selalu add_row())
+        self._first_row_used = False
+
+    def _new_row(self):
+        if not self._first_row_used:
+            row = self.table.rows[0]
+            self._first_row_used = True
+        else:
+            row = self.table.add_row()
+        set_col_widths(self.table, self.col_widths_cm)
+        return row
+
+    def add_section_header(self, text, shade=HEADER_FILL, size=12):
+        """Baris judul section penuh (2 kolom digabung), background abu-abu, bold."""
+        row = self._new_row()
+        merged = row.cells[0].merge(row.cells[1])
+        set_cell_background(merged, shade)
+        merged.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        # bersihkan paragraf default lalu isi
+        merged.paragraphs[0].text = ""
+        add_paragraph_in_cell(merged, text, bold=True, size=size, first=True)
+        return merged
+
+    def add_label_value(self, label, value):
+        """Baris 2 kolom: label bold di kiri, ': value' di kanan."""
+        row = self._new_row()
+        c0, c1 = row.cells
+        c0.paragraphs[0].text = ""
+        add_paragraph_in_cell(c0, label, bold=True, first=True)
+        c1.paragraphs[0].text = ""
+        add_paragraph_in_cell(c1, f": {value}" if value else ": ", first=True)
+        return row
+
+    def add_full_content(self, content, bullet=False, italic_intro=None):
+        """
+        Baris penuh (2 kolom digabung jadi 1) berisi paragraf atau daftar bullet.
+        content: str, atau list[str] (tiap item jadi 1 paragraf/bullet).
+        """
+        row = self._new_row()
+        merged = row.cells[0].merge(row.cells[1])
+        merged.paragraphs[0].text = ""
+        first = True
+
+        if italic_intro:
+            add_paragraph_in_cell(merged, italic_intro, italic=True, first=first)
+            first = False
+
+        if content is None:
+            items = []
+        else:
+            items = content if isinstance(content, list) else [content]
+        if not items and not italic_intro:
+            items = ["-"]
+
+        for item in items:
+            style = 'List Bullet' if bullet else None
+            add_paragraph_in_cell(merged, str(item), first=first, bullet_style=style)
+            first = False
+        return merged
+
+    def add_nested_table(self, headers, rows, col_widths_cm=None, merge_first_row_span=None):
+        """
+        Menambahkan tabel kecil (rubrik/kisi-kisi) ke dalam baris penuh (2 kolom
+        digabung). headers: list[str]; rows: list[list[str]].
+        """
+        row = self._new_row()
+        merged = row.cells[0].merge(row.cells[1])
+        merged.paragraphs[0].text = ""
+
+        n_cols = len(headers)
+        inner = merged.add_table(rows=1, cols=n_cols)
+        # buang paragraf kosong bawaan cell yang bikin celah di atas tabel bersarang
+        empty_p = merged.paragraphs[0]._p
+        empty_p.getparent().remove(empty_p)
+        set_table_borders(inner, size=3)
+        if col_widths_cm:
+            set_col_widths(inner, col_widths_cm)
+
+        # header
+        hdr_cells = inner.rows[0].cells
+        for i, h in enumerate(headers):
+            hdr_cells[i].paragraphs[0].text = ""
+            set_cell_background(hdr_cells[i], HEADER_FILL)
+            add_paragraph_in_cell(hdr_cells[i], h, bold=True, size=10, first=True,
+                                   align=WD_ALIGN_PARAGRAPH.CENTER)
+        set_repeat_table_header(inner.rows[0])
+
+        # data rows
+        for r in rows:
+            data_row = inner.add_row()
+            for i, val in enumerate(r):
+                cell = data_row.cells[i]
+                cell.paragraphs[0].text = ""
+                add_paragraph_in_cell(cell, str(val), size=10, first=True)
+
+        if col_widths_cm:
+            set_col_widths(inner, col_widths_cm)
+        return inner
