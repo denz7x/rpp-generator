@@ -1,33 +1,11 @@
 """
-Backend logic: generation via Gemini (2 tahap, supaya JSON tidak terlalu
-raksasa & risiko gagal-parse lebih kecil) + pembuatan file .docx lengkap
-yang meniru struktur "MODUL AJAR KURIKULUM MERDEKA" resmi Kemendikbud:
-
-  COVER
-  INFORMASI UMUM
-    A. Identitas Modul
-    B. Kompetensi Awal
-    C. Profil Pelajar Pancasila
-    D. Sarana dan Prasarana
-    E. Target Peserta Didik
-    F. Model Pembelajaran
-  KOMPONEN INTI
-    A. Tujuan Kegiatan Pembelajaran
-    B. Pemahaman Bermakna
-    C. Pertanyaan Pemantik
-    D. Kegiatan Pembelajaran (Pendahuluan/Inti/Penutup)
-    E. Refleksi
-    F. Asesmen / Penilaian (sikap, pengetahuan, keterampilan - lengkap dgn tabel)
-    G. Kegiatan Pengayaan dan Remedial
-  LAMPIRAN
-    A. Lembar Kerja Peserta Didik (LKPD)
-    B. Bahan Bacaan Guru & Peserta Didik
-    C. Glosarium
-    D. Daftar Pustaka
+Backend logic: generation via Gemini dengan sistem Ekstraksi JSON Anti-Gagal 
+dan Penanganan Error Detil.
 """
 
 import io
 import json
+import streamlit as st # Tambahan agar error bisa langsung tampil di UI web
 
 from docx import Document
 from docx.shared import Pt, Cm
@@ -40,19 +18,22 @@ try:
 except ImportError:
     genai = None
 
-
 # ==========================================================================
-# 1. GENERASI KONTEN VIA GEMINI (2 TAHAP)
+# 1. GENERASI KONTEN VIA GEMINI (Sistem Anti-Gagal)
 # ==========================================================================
 
 def _clean_json(text):
+    """
+    Ekstraktor super aman: Memaksa mencari kurung kurawal pertama { 
+    dan kurung kurawal terakhir } untuk mengabaikan teks Markdown tambahan dari AI.
+    """
     text = text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    return text.strip()
-
+    start = text.find('{')
+    end = text.rfind('}')
+    
+    if start != -1 and end != -1:
+        return text[start:end+1]
+    return text
 
 def _ctx_block(ctx):
     return f"""
@@ -68,103 +49,97 @@ Profil Pelajar Pancasila yang dituju : {', '.join(ctx['profil'])}
 
 
 PROMPT_BAGIAN_UMUM = """
-Kamu adalah asisten penyusun Modul Ajar Kurikulum Merdeka untuk guru di Indonesia.
-Buatkan bagian "INFORMASI UMUM" dan "KOMPONEN INTI" (tanpa asesmen detail) untuk:
+Kamu adalah asisten penyusun Modul Ajar Kurikulum Merdeka.
+Buatkan bagian "INFORMASI UMUM" dan "KOMPONEN INTI" untuk:
 
 {ctx}
 
-Tulis dalam Bahasa Indonesia baku, kontekstual sesuai mapel & materi di atas.
-Keluarkan HANYA JSON murni (tanpa markdown, tanpa penjelasan tambahan), dengan skema PERSIS berikut:
+Keluarkan HANYA JSON murni dengan skema PERSIS berikut:
 
 {{
-  "elemen_a": ["poin penjelasan elemen pemahaman/ruang lingkup 1", "poin 2", "poin 3"],
+  "elemen_a": ["poin penjelasan elemen pemahaman/ruang lingkup 1", "poin 2"],
   "elemen_b": ["poin keterampilan proses 1", "poin 2"],
   "capaian_pembelajaran": "kalimat capaian pembelajaran untuk materi ini",
   "kompetensi_awal": ["poin kompetensi awal yang dibutuhkan peserta didik"],
-  "sarana_prasarana": ["poin sarana/media/alat/sumber belajar 1", "poin 2", "poin 3"],
-  "target_peserta_didik": ["deskripsi peserta didik reguler/tipikal", "deskripsi peserta didik pencapaian tinggi"],
-  "model_pembelajaran_desc": "1-2 kalimat deskripsi singkat model pembelajaran yang dipilih guru dan mengapa cocok untuk materi ini",
+  "sarana_prasarana": ["poin sarana/media/alat/sumber belajar 1", "poin 2"],
+  "target_peserta_didik": ["deskripsi peserta didik reguler", "deskripsi peserta didik pencapaian tinggi"],
+  "model_pembelajaran_desc": "deskripsi singkat model pembelajaran",
   "tujuan_pembelajaran": ["poin alur tujuan pembelajaran 1", "poin 2"],
   "pemahaman_bermakna": ["poin pemahaman bermakna 1", "poin 2"],
   "pertanyaan_pemantik": ["pertanyaan pemantik 1", "pertanyaan pemantik 2"],
-  "kegiatan_pendahuluan": ["langkah pendahuluan 1", "langkah 2", "langkah 3", "langkah 4"],
-  "kegiatan_inti": ["paragraf/langkah kegiatan inti 1 (jelaskan detail aktivitas)", "langkah 2", "langkah 3"],
+  "kegiatan_pendahuluan": ["langkah pendahuluan 1", "langkah 2", "langkah 3"],
+  "kegiatan_inti": ["langkah kegiatan inti 1", "langkah 2", "langkah 3"],
   "kegiatan_penutup": ["langkah penutup 1", "langkah 2", "langkah 3"],
-  "refleksi_guru": "1 paragraf refleksi/insight bermakna terkait materi untuk guru sampaikan ke siswa",
-  "refleksi_sikap": ["pertanyaan refleksi sikap 1", "pertanyaan refleksi sikap 2", "pertanyaan refleksi sikap 3"],
+  "refleksi_guru": "refleksi terkait materi",
+  "refleksi_sikap": ["pertanyaan refleksi sikap 1", "pertanyaan refleksi sikap 2"],
   "refleksi_pengetahuan": ["pertanyaan refleksi pengetahuan 1"],
   "refleksi_keterampilan": ["pertanyaan refleksi keterampilan 1"],
-  "pengayaan": "deskripsi singkat kegiatan pengayaan untuk peserta didik yang sudah tuntas",
-  "remedial_catatan": "catatan singkat pendekatan remedial untuk materi ini"
+  "pengayaan": "deskripsi kegiatan pengayaan",
+  "remedial_catatan": "catatan pendekatan remedial"
 }}
 """
 
 PROMPT_ASESMEN_LAMPIRAN = """
-Kamu adalah asisten penyusun Modul Ajar Kurikulum Merdeka untuk guru di Indonesia.
+Kamu adalah asisten penyusun Modul Ajar Kurikulum Merdeka.
 Buatkan bagian "ASESMEN/PENILAIAN LENGKAP" dan "LAMPIRAN" untuk:
 
 {ctx}
 
-Tulis dalam Bahasa Indonesia baku, kontekstual sesuai mapel & materi di atas.
-Keluarkan HANYA JSON murni (tanpa markdown, tanpa penjelasan tambahan), dengan skema PERSIS berikut:
+Keluarkan HANYA JSON murni dengan skema PERSIS berikut:
 
 {{
-  "asesmen_konsep": "1 paragraf konsep/tujuan penilaian pembelajaran untuk materi ini",
+  "asesmen_konsep": "1 paragraf konsep penilaian",
   "kisi_kisi_tes": {{"kd": "kompetensi dasar", "materi": "materi", "indikator": "indikator soal", "bentuk": "Tes Tertulis", "jumlah_soal": 2}},
   "butir_soal": ["Soal nomor 1 lengkap", "Soal nomor 2 lengkap"],
   "kunci_skor": [{{"no": "1", "kunci": "kunci jawaban ringkas", "skor": 2}}, {{"no": "2", "kunci": "kunci jawaban ringkas", "skor": 2}}],
-  "tes_lisan": ["pertanyaan lisan 1", "pertanyaan lisan 2", "pertanyaan lisan 3"],
-  "kisi_kisi_penugasan": {{"kd": "kompetensi dasar", "materi": "materi", "indikator": "indikator"}},
-  "deskripsi_penugasan": "deskripsi singkat tugas yang diberikan ke peserta didik",
-  "rubrik_penugasan": [{{"aspek": "aspek yang dinilai 1", "skor": "0-2"}}, {{"aspek": "aspek 2", "skor": "0-3"}}],
-  "kisi_kisi_kinerja": {{"kd": "kompetensi dasar", "materi": "materi", "indikator": "indikator"}},
-  "rubrik_kinerja": [{{"indikator": "indikator kinerja 1", "rubrik": "kriteria skor 0-4 dijelaskan singkat"}}],
-  "kisi_kisi_proyek": {{"kd": "kompetensi dasar", "materi": "materi", "indikator": "indikator"}},
-  "tugas_proyek": ["langkah pengerjaan proyek 1", "langkah 2", "langkah 3"],
-  "rubrik_proyek": [{{"pernyataan": "aspek yang dinilai 1", "keterangan": "keterangan level penilaian"}}],
-  "lkpd_petunjuk": "1-2 kalimat petunjuk pengerjaan LKPD",
-  "lkpd_soal": ["soal/aktivitas LKPD 1", "soal/aktivitas LKPD 2", "soal/aktivitas LKPD 3"],
-  "bahan_bacaan_siswa": "2-3 paragraf bahan bacaan untuk peserta didik terkait materi",
-  "bahan_bacaan_guru": "1-2 paragraf bahan bacaan/catatan pedagogis untuk guru",
-  "glosarium": [{{"istilah": "istilah 1", "definisi": "definisi singkat"}}, {{"istilah": "istilah 2", "definisi": "definisi singkat"}}],
-  "daftar_pustaka": ["referensi 1 format daftar pustaka", "referensi 2"]
+  "tes_lisan": ["pertanyaan lisan 1", "pertanyaan lisan 2"],
+  "kisi_kisi_penugasan": {{"kd": "kompetensi", "materi": "materi", "indikator": "indikator"}},
+  "deskripsi_penugasan": "deskripsi tugas",
+  "rubrik_penugasan": [{{"aspek": "aspek dinilai 1", "skor": "0-2"}}],
+  "kisi_kisi_kinerja": {{"kd": "kompetensi", "materi": "materi", "indikator": "indikator"}},
+  "rubrik_kinerja": [{{"indikator": "indikator 1", "rubrik": "kriteria skor"}}],
+  "kisi_kisi_proyek": {{"kd": "kompetensi", "materi": "materi", "indikator": "indikator"}},
+  "tugas_proyek": ["langkah proyek 1", "langkah 2"],
+  "rubrik_proyek": [{{"pernyataan": "aspek 1", "keterangan": "keterangan penilaian"}}],
+  "lkpd_petunjuk": "petunjuk pengerjaan LKPD",
+  "lkpd_soal": ["soal LKPD 1", "soal LKPD 2"],
+  "bahan_bacaan_siswa": "bahan bacaan peserta didik",
+  "bahan_bacaan_guru": "bahan bacaan guru",
+  "glosarium": [{{"istilah": "istilah 1", "definisi": "definisi singkat"}}],
+  "daftar_pustaka": ["referensi 1", "referensi 2"]
 }}
 """
 
 
-def _call_gemini_json(model_name, prompt):
-    model = genai.GenerativeModel(model_name)
-    # PERBAIKAN UTAMA: Memaksa Gemini untuk selalu merespons dengan JSON MURNI
-    generation_config = genai.GenerationConfig(
-        response_mime_type="application/json",
-        temperature=0.7,
-        max_output_tokens=8192
-    )
-    response = model.generate_content(
-        prompt,
-        generation_config=generation_config,
-        request_options={"timeout": 90},
-    )
-    text = _clean_json(response.text)
-    return json.loads(text)
+def _call_gemini_json(model_name, prompt, tahap_nama):
+    try:
+        model = genai.GenerativeModel(model_name)
+        # Menggunakan format pemanggilan paling aman yang kompatibel 
+        # dengan SEMUA versi library google-generativeai di Streamlit
+        response = model.generate_content(prompt)
+        
+        # Ekstraksi dan baca JSON
+        text_bersih = _clean_json(response.text)
+        return json.loads(text_bersih)
+        
+    except json.JSONDecodeError as je:
+        st.error(f"❌ [Tahap {tahap_nama}] AI gagal memberikan format yang tepat.")
+        if 'response' in locals() and hasattr(response, 'text'):
+            with st.expander(f"🔍 Klik untuk lihat balasan AI yang error ({tahap_nama})"):
+                st.code(response.text)
+        return None
+    except Exception as e:
+        st.error(f"⚠️ [Tahap {tahap_nama}] Error Sistem: {str(e)}")
+        return None
 
 
 def generate_bagian_umum(model_name, ctx):
     prompt = PROMPT_BAGIAN_UMUM.format(ctx=_ctx_block(ctx))
-    try:
-        return _call_gemini_json(model_name, prompt)
-    except Exception as e:
-        print(f"Error pada generate_bagian_umum: {e}")
-        return None
-
+    return _call_gemini_json(model_name, prompt, "Informasi Umum & Inti")
 
 def generate_asesmen_lampiran(model_name, ctx):
     prompt = PROMPT_ASESMEN_LAMPIRAN.format(ctx=_ctx_block(ctx))
-    try:
-        return _call_gemini_json(model_name, prompt)
-    except Exception as e:
-        print(f"Error pada generate_asesmen_lampiran: {e}")
-        return None
+    return _call_gemini_json(model_name, prompt, "Asesmen & Lampiran")
 
 
 # ==========================================================================
@@ -310,7 +285,7 @@ def create_docx(data_input, ai_umum, ai_asesmen):
     mt.add_full_content(_g(ai_umum, 'refleksi_keterampilan', ['-']), bullet=True,
                          italic_intro="Keterampilan")
 
-    # ---------- F. ASESMEN / PENILAIAN (lengkap) ----------
+    # ---------- F. ASESMEN / PENILAIAN ----------
     mt.add_section_header("F. ASESMEN / PENILAIAN")
     mt.add_full_content(_g(ai_asesmen, 'asesmen_konsep', '-'))
 
