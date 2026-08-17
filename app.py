@@ -158,10 +158,11 @@ active_model = get_available_model()
 # ==========================================
 st.markdown("""
 <div class="header-container">
-    <h1 style="margin: 0; font-size: 1.6rem; font-weight: 800; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">🚀 GENERATOR MODUL AJAR</h1>
+    <h1 style="margin: 0; font-size: 1.6rem; font-weight: 600; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">🚀 GENERATOR MODUL AJAR</h1>
     <p style="margin: 0.2rem 0 0 0; font-size: 0.85rem; font-weight: 500;">Penyusun Modul Ajar & LKPD Cerdas Kurikulum Merdeka</p>
     <div style="margin-top: 8px; font-size: 0.75rem; background: rgba(0,0,0,0.15); padding: 4px 10px; border-radius: 20px; display: inline-block;">
-        dibuat oleh : Ceng Ucu Muhammad, S.H - ( Kepala Sekolah SMP IT Nurusy Syifa )
+        dibuat oleh : 
+        Ceng Ucu Muhammad, S.H - ( Kepala Sekolah SMP IT Nurusy Syifa )
     </div>
 </div>
 """, unsafe_allow_html=True)
