@@ -141,7 +141,7 @@ def get_available_model():
                 available_models.append(m.name)
         if not available_models:
             return None
-        prioritas = ["models/gemini-1.5-flash", "models/gemini-2.5-flash"]
+        prioritas = ["models/gemini-3.6-flash", "models/gemini-1.5-flash", "models/gemini-2.5-flash"]
         for nama in prioritas:
             if nama in available_models:
                 return nama
