@@ -2,7 +2,12 @@
 import streamlit as st
 import google.generativeai as genai
 from pathlib import Path
-from rpp_backend import generate_modul, create_docx, TEMPLATE_PATH
+try:
+    from rpp_backend import generate_modul, create_docx, TEMPLATE_PATH
+except Exception as e:
+    st.error("Gagal memuat rpp_backend.py. Pastikan file rpp_backend.py berada satu folder dengan app.py dan requirements.txt sudah terpasang.")
+    st.code(f"{type(e).__name__}: {e}")
+    st.stop()
 
 st.set_page_config(page_title="MODUL AJAR GENERATOR", page_icon="🚀", layout="wide")
 
