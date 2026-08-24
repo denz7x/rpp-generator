@@ -1,420 +1,296 @@
-"""
-Backend logic: generation via Gemini dengan sistem Ekstraksi JSON Anti-Gagal 
-dan Penanganan Error Detil.
-"""
 
-import io
-import json
-import streamlit as st # Tambahan agar error bisa langsung tampil di UI web
-
+"""
+Backend Modul Ajar Generator V2
+- Menggunakan DOCX contoh sebagai MASTER TEMPLATE.
+- AI hanya menghasilkan isi.
+- Format, heading, tabel, margin, font, dan struktur template dipertahankan.
+"""
+import io, json, re
+from pathlib import Path
+import streamlit as st
 from docx import Document
-from docx.shared import Pt, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-from docx_helpers import ModulTable, style_run, add_paragraph_in_cell, add_bottom_border
+from docx.shared import Pt
 
 try:
     import google.generativeai as genai
 except ImportError:
     genai = None
 
-# ==========================================================================
-# 1. GENERASI KONTEN VIA GEMINI (Sistem Anti-Gagal)
-# ==========================================================================
+BASE_DIR = Path(__file__).resolve().parent
+TEMPLATE_PATH = BASE_DIR / "Modul Ajar 1 IPS K-VII (Deep Learning).docx"
 
 def _clean_json(text):
-    """
-    Ekstraktor super aman: Memaksa mencari kurung kurawal pertama { 
-    dan kurung kurawal terakhir } untuk mengabaikan teks Markdown tambahan dari AI.
-    """
-    text = text.strip()
-    start = text.find('{')
-    end = text.rfind('}')
-    
-    if start != -1 and end != -1:
-        return text[start:end+1]
-    return text
+    text = (text or "").strip()
+    if "```" in text:
+        text = re.sub(r"```(?:json)?", "", text).replace("```", "").strip()
+    a, b = text.find("{"), text.rfind("}")
+    return text[a:b+1] if a >= 0 and b > a else text
 
 def _ctx_block(ctx):
     return f"""
-Mata Pelajaran : {ctx['mapel']}
-Jenjang/Fase   : {ctx['jenjang']} / Fase {ctx['fase']}
-Kelas/Semester : {ctx['kelas']} / {ctx['semester']}
-Tema           : {ctx['tema']}
-Materi/Topik   : {ctx['materi']}
-Alokasi Waktu  : {ctx['waktu']}
-Model Pembelajaran pilihan guru : {ctx['model_pembelajaran']}
-Profil Pelajar Pancasila yang dituju : {', '.join(ctx['profil'])}
+Nama sekolah: {ctx['sekolah']}
+Nama penyusun: {ctx['guru']}
+NIP/NIK: {ctx.get('nik','')}
+Kepala sekolah: {ctx.get('kepsek','')}
+Tahun penyusunan: {ctx.get('tahun','')}
+Jenjang: {ctx['jenjang']}
+Mata pelajaran: {ctx['mapel']}
+Fase: {ctx['fase']}
+Kelas: {ctx['kelas']}
+Semester: {ctx['semester']}
+Bab/Tema: {ctx['tema']}
+Materi/Topik: {ctx['materi']}
+Alokasi waktu: {ctx['waktu']}
+Model pembelajaran: {ctx['model_pembelajaran']}
+Profil/Dimensi yang dipilih: {', '.join(ctx.get('profil',[]))}
 """.strip()
 
+PROMPT = r"""
+Anda adalah penyusun Modul Ajar Kurikulum Merdeka dengan pendekatan Deep Learning.
+Gunakan DATA GURU di bawah ini.
 
-PROMPT_BAGIAN_UMUM = """
-Kamu adalah asisten penyusun Modul Ajar Kurikulum Merdeka.
-Buatkan bagian "INFORMASI UMUM" dan "KOMPONEN INTI" untuk:
+PENTING:
+1. Pertahankan istilah dan urutan komponen seperti template modul contoh:
+   IDENTITAS MODUL; IDENTIFIKASI KESIAPAN PESERTA DIDIK;
+   KARAKTERISTIK MATERI PELAJARAN; DIMENSI PROFIL LULUSAN;
+   DESAIN PEMBELAJARAN; CAPAIAN PEMBELAJARAN; LINTAS DISIPLIN ILMU;
+   TUJUAN PEMBELAJARAN; TOPIK PEMBELAJARAN KONTEKSTUAL;
+   KERANGKA PEMBELAJARAN; PRAKTIK PEDAGOGIK; KEMITRAAN PEMBELAJARAN;
+   LINGKUNGAN BELAJAR; PEMANFAATAN DIGITAL;
+   LANGKAH-LANGKAH PEMBELAJARAN BERDIFERENSIASI;
+   ASESMEN PEMBELAJARAN.
+2. Tulis isi yang spesifik terhadap mata pelajaran, fase, kelas, bab, materi dan alokasi waktu.
+3. Gunakan pendekatan Deep Learning: Mindful, Meaningful, Joyful Learning.
+4. Jangan membuat pembahasan yang tidak relevan dengan materi.
+5. Untuk langkah pembelajaran, buat 15 pertemuan seperti struktur template contoh. Jika alokasi waktu pengguna berbeda, sesuaikan pembagian topik secara wajar tetapi tetap gunakan 15 blok pertemuan agar format template tetap konsisten.
+6. Setiap pertemuan wajib memiliki: Topik, KEGIATAN PENDAHULUAN, KEGIATAN INTI, Pembelajaran Berdiferensiasi bila relevan, KEGIATAN PENUTUP.
+7. Buat asesmen diagnostik, formatif, dan sumatif yang benar-benar terkait materi.
+8. Buat soal pilihan ganda dan esai yang relevan dengan materi.
+9. Keluarkan HANYA JSON valid, tanpa Markdown.
 
+SKEMA JSON:
+{
+ "identitas": ["Nama Sekolah : ...","Nama Penyusun : ...","Mata Pelajaran : ...","Kelas / Fase /Semester : ...","Alokasi Waktu : ...","Tahun Pelajaran : ..."],
+ "identifikasi_kesiapan": ["Pengetahuan Awal: ...","Minat: ...","Latar Belakang: ...","Kebutuhan Belajar:","Visual: ...","Auditori: ...","Kinestetik: ..."],
+ "karakteristik_materi": ["Jenis Pengetahuan yang Akan Dicapai:","Konseptual: ...","Prosedural: ...","Relevansi dengan Kehidupan Nyata Peserta Didik: ...","Tingkat Kesulitan: ...","Struktur Materi: ...","Integrasi Nilai dan Karakter:","..."],
+ "dimensi_profil_lulusan": ["..."],
+ "capaian_pembelajaran": ["Pada akhir Fase ..., murid memiliki kemampuan sebagai berikut.","Pemahaman Konsep: ...","Keterampilan Proses: ..."],
+ "lintas_disiplin_ilmu": ["..."],
+ "tujuan_pembelajaran": ["Pertemuan 1-2: ...","Pertemuan 3: ...","..."],
+ "topik_kontekstual": ["JUDUL BAB: deskripsi kontekstual ..."],
+ "praktik_pedagogik": ["Model Pembelajaran: ...","Pendekatan: Deep Learning (Mindful, Meaningful, Joyful Learning)","Mindful Learning: ...","Meaningful Learning: ...","Joyful Learning: ...","Metode Pembelajaran: ...","Strategi Pembelajaran Berdiferensiasi:","Diferensiasi Konten: ...","Diferensiasi Proses: ...","Diferensiasi Produk: ..."],
+ "kemitraan": ["Lingkungan Sekolah: ...","Lingkungan Luar Sekolah/Masyarakat: ...","Mitra Digital: ..."],
+ "lingkungan_belajar": ["Lingkungan Fisik: ...","Lingkungan Virtual: ...","Lingkungan Psikologis: ..."],
+ "pemanfaatan_digital": ["..."],
+ "pertemuan": [
+   {"judul":"PERTEMUAN 1-2 (4 JP : 2 x 80 MENIT)","isi":["Topik: ...","KEGIATAN PENDAHULUAN (15 MENIT)","Salam dan Doa: ...","Apersepsi: ...","Tujuan Pembelajaran: ...","KEGIATAN INTI (55 MENIT)","Eksplorasi Konsep: ...","Aktivitas Kelompok: ...","Presentasi: ...","Pembelajaran Berdiferensiasi:","Proses: ...","KEGIATAN PENUTUP (10 MENIT)","Refleksi: ...","Tindak Lanjut: ...","Penutup: ..."]},
+   {"judul":"PERTEMUAN 3 (2 JP : 80 MENIT)","isi":["..."]},
+   {"judul":"PERTEMUAN 4-5 (4 JP : 2 x 80 MENIT)","isi":["..."]},
+   {"judul":"PERTEMUAN 6 (2 JP : 80 MENIT)","isi":["..."]},
+   {"judul":"PERTEMUAN 7 (2 JP : 80 MENIT)","isi":["..."]},
+   {"judul":"PERTEMUAN 8 (2 JP : 80 MENIT)","isi":["..."]},
+   {"judul":"PERTEMUAN 9 (2 JP : 80 MENIT)","isi":["..."]},
+   {"judul":"PERTEMUAN 10-11 (4 JP : 2 x 80 MENIT)","isi":["..."]},
+   {"judul":"PERTEMUAN 12-13 (4 JP : 2 x 80 MENIT)","isi":["..."]},
+   {"judul":"PERTEMUAN 14-15 (4 JP : 2 x 80 MENIT)","isi":["..."]}
+ ],
+ "asesmen_diagnostik": ["..."],
+ "asesmen_formatif": ["..."],
+ "asesmen_sumatif": ["Produk (Proyek): ...","Praktik (Kinerja): ...","Tes Tertulis: ...","Contoh Tes Tertulis :","Pilihan Ganda","1. ...","a. ...","b. ...","c. ...","d. ...","2. ...","a. ...","b. ...","c. ...","d. ...","3. ...","a. ...","b. ...","c. ...","d. ...","Esai","1. ...","2. ...","3. ..."],
+ "lkpd": ["Petunjuk LKPD: ...","1. ...","2. ...","3. ..."],
+ "bahan_bacaan": ["Bahan Bacaan Peserta Didik: ...","Bahan Bacaan Guru: ..."],
+ "glosarium": ["Istilah : definisi"],
+ "daftar_pustaka": ["..."]
+}
+
+DATA GURU:
 {ctx}
-
-Keluarkan HANYA JSON murni dengan skema PERSIS berikut:
-
-{{
-  "elemen_a": ["poin penjelasan elemen pemahaman/ruang lingkup 1", "poin 2"],
-  "elemen_b": ["poin keterampilan proses 1", "poin 2"],
-  "capaian_pembelajaran": "kalimat capaian pembelajaran untuk materi ini",
-  "kompetensi_awal": ["poin kompetensi awal yang dibutuhkan peserta didik"],
-  "sarana_prasarana": ["poin sarana/media/alat/sumber belajar 1", "poin 2"],
-  "target_peserta_didik": ["deskripsi peserta didik reguler", "deskripsi peserta didik pencapaian tinggi"],
-  "model_pembelajaran_desc": "deskripsi singkat model pembelajaran",
-  "tujuan_pembelajaran": ["poin alur tujuan pembelajaran 1", "poin 2"],
-  "pemahaman_bermakna": ["poin pemahaman bermakna 1", "poin 2"],
-  "pertanyaan_pemantik": ["pertanyaan pemantik 1", "pertanyaan pemantik 2"],
-  "kegiatan_pendahuluan": ["langkah pendahuluan 1", "langkah 2", "langkah 3"],
-  "kegiatan_inti": ["langkah kegiatan inti 1", "langkah 2", "langkah 3"],
-  "kegiatan_penutup": ["langkah penutup 1", "langkah 2", "langkah 3"],
-  "refleksi_guru": "refleksi terkait materi",
-  "refleksi_sikap": ["pertanyaan refleksi sikap 1", "pertanyaan refleksi sikap 2"],
-  "refleksi_pengetahuan": ["pertanyaan refleksi pengetahuan 1"],
-  "refleksi_keterampilan": ["pertanyaan refleksi keterampilan 1"],
-  "pengayaan": "deskripsi kegiatan pengayaan",
-  "remedial_catatan": "catatan pendekatan remedial"
-}}
 """
 
-PROMPT_ASESMEN_LAMPIRAN = """
-Kamu adalah asisten penyusun Modul Ajar Kurikulum Merdeka.
-Buatkan bagian "ASESMEN/PENILAIAN LENGKAP" dan "LAMPIRAN" untuk:
-
-{ctx}
-
-Keluarkan HANYA JSON murni dengan skema PERSIS berikut:
-
-{{
-  "asesmen_konsep": "1 paragraf konsep penilaian",
-  "kisi_kisi_tes": {{"kd": "kompetensi dasar", "materi": "materi", "indikator": "indikator soal", "bentuk": "Tes Tertulis", "jumlah_soal": 2}},
-  "butir_soal": ["Soal nomor 1 lengkap", "Soal nomor 2 lengkap"],
-  "kunci_skor": [{{"no": "1", "kunci": "kunci jawaban ringkas", "skor": 2}}, {{"no": "2", "kunci": "kunci jawaban ringkas", "skor": 2}}],
-  "tes_lisan": ["pertanyaan lisan 1", "pertanyaan lisan 2"],
-  "kisi_kisi_penugasan": {{"kd": "kompetensi", "materi": "materi", "indikator": "indikator"}},
-  "deskripsi_penugasan": "deskripsi tugas",
-  "rubrik_penugasan": [{{"aspek": "aspek dinilai 1", "skor": "0-2"}}],
-  "kisi_kisi_kinerja": {{"kd": "kompetensi", "materi": "materi", "indikator": "indikator"}},
-  "rubrik_kinerja": [{{"indikator": "indikator 1", "rubrik": "kriteria skor"}}],
-  "kisi_kisi_proyek": {{"kd": "kompetensi", "materi": "materi", "indikator": "indikator"}},
-  "tugas_proyek": ["langkah proyek 1", "langkah 2"],
-  "rubrik_proyek": [{{"pernyataan": "aspek 1", "keterangan": "keterangan penilaian"}}],
-  "lkpd_petunjuk": "petunjuk pengerjaan LKPD",
-  "lkpd_soal": ["soal LKPD 1", "soal LKPD 2"],
-  "bahan_bacaan_siswa": "bahan bacaan peserta didik",
-  "bahan_bacaan_guru": "bahan bacaan guru",
-  "glosarium": [{{"istilah": "istilah 1", "definisi": "definisi singkat"}}],
-  "daftar_pustaka": ["referensi 1", "referensi 2"]
-}}
-"""
-
-
-def _call_gemini_json(model_name, prompt, tahap_nama):
+def _call(model_name, ctx):
+    if genai is None:
+        st.error("Library google-generativeai belum terpasang.")
+        return None
     try:
         model = genai.GenerativeModel(model_name)
-        # Menggunakan format pemanggilan paling aman yang kompatibel 
-        # dengan SEMUA versi library google-generativeai di Streamlit
-        response = model.generate_content(prompt)
-        
-        # Ekstraksi dan baca JSON
-        text_bersih = _clean_json(response.text)
-        return json.loads(text_bersih)
-        
-    except json.JSONDecodeError as je:
-        st.error(f"❌ [Tahap {tahap_nama}] AI gagal memberikan format yang tepat.")
-        if 'response' in locals() and hasattr(response, 'text'):
-            with st.expander(f"🔍 Klik untuk lihat balasan AI yang error ({tahap_nama})"):
+        response = model.generate_content(PROMPT.format(ctx=_ctx_block(ctx)))
+        return json.loads(_clean_json(response.text))
+    except Exception as e:
+        st.error(f"Gagal menghasilkan modul: {e}")
+        if 'response' in locals() and getattr(response, "text", None):
+            with st.expander("Lihat respons AI"):
                 st.code(response.text)
         return None
-    except Exception as e:
-        st.error(f"⚠️ [Tahap {tahap_nama}] Error Sistem: {str(e)}")
-        return None
 
+def generate_modul(model_name, ctx):
+    return _call(model_name, ctx)
 
-def generate_bagian_umum(model_name, ctx):
-    prompt = PROMPT_BAGIAN_UMUM.format(ctx=_ctx_block(ctx))
-    return _call_gemini_json(model_name, prompt, "Informasi Umum & Inti")
+def _replace_paragraph_text(p, text):
+    # Mempertahankan paragraph style dan properti paragraf.
+    runs = p.runs
+    if not runs:
+        p.add_run(str(text))
+        return
+    runs[0].text = str(text)
+    for r in runs[1:]:
+        r.text = ""
 
-def generate_asesmen_lampiran(model_name, ctx):
-    prompt = PROMPT_ASESMEN_LAMPIRAN.format(ctx=_ctx_block(ctx))
-    return _call_gemini_json(model_name, prompt, "Asesmen & Lampiran")
+def _is_heading(p):
+    return p.style.name.startswith("Heading")
 
+def _set_heading(p, text):
+    _replace_paragraph_text(p, text)
 
-# ==========================================================================
-# 2. PEMBUATAN DOCX
-# ==========================================================================
+def _insert_before(ref_p, text, style="Normal"):
+    p = ref_p.insert_paragraph_before(str(text))
+    p.style = style
+    return p
 
-def _g(d, key, default):
-    """Ambil field dari dict AI dengan fallback aman."""
-    if not d:
-        return default
-    val = d.get(key, default)
-    return val if val not in (None, "") else default
+def _fill_section(doc, heading_idx, next_heading_idx, lines):
+    paras = doc.paragraphs
+    heading = paras[heading_idx]
+    next_p = paras[next_heading_idx] if next_heading_idx is not None else None
+    # Reacquire paragraph list after insertions by using XML sibling references.
+    body = []
+    cur = heading._p.getnext()
+    stop = next_p._p if next_p else None
+    while cur is not None and cur is not stop:
+        if cur.tag.endswith('}p'):
+            from docx.text.paragraph import Paragraph
+            body.append(Paragraph(cur, heading._parent))
+        cur = cur.getnext()
 
+    lines = [str(x) for x in (lines or []) if str(x).strip()]
+    if not lines:
+        lines = [""]
+    for i, text in enumerate(lines):
+        if i < len(body):
+            _replace_paragraph_text(body[i], text)
+        else:
+            if next_p:
+                _insert_before(next_p, text, "Normal")
+            else:
+                p = doc.add_paragraph(text)
+    for p in body[len(lines):]:
+        _replace_paragraph_text(p, "")
 
-def create_docx(data_input, ai_umum, ai_asesmen):
-    ai_umum = ai_umum or {}
-    ai_asesmen = ai_asesmen or {}
+def _find_heading(doc, exact):
+    for p in doc.paragraphs:
+        if p.text.strip() == exact:
+            return p
+    return None
 
-    doc = Document()
-    style = doc.styles['Normal']
-    style.font.name = 'Times New Roman'
-    style.font.size = Pt(11)
+def _section_range(doc, heading_text, next_heading_text):
+    paras = doc.paragraphs
+    a = next((i for i,p in enumerate(paras) if p.text.strip()==heading_text), None)
+    b = next((i for i,p in enumerate(paras) if p.text.strip()==next_heading_text), None) if next_heading_text else None
+    return a,b
 
-    for section in doc.sections:
-        section.top_margin = Cm(2)
-        section.bottom_margin = Cm(2)
-        section.left_margin = Cm(2.5)
-        section.right_margin = Cm(2.5)
+def _replace_section(doc, heading_text, lines, next_heading_text=None):
+    a,b = _section_range(doc, heading_text, next_heading_text)
+    if a is None:
+        return
+    _fill_section(doc, a, b, lines)
 
-    judul_baris1 = "MODUL AJAR KURIKULUM MERDEKA"
-    judul_baris2 = f"{data_input['mapel'].upper()} FASE {data_input['fase']} KELAS {data_input['kelas']}"
+def _all_heading_texts(doc):
+    return [p.text.strip() for p in doc.paragraphs if _is_heading(p) and p.text.strip()]
 
-    # ---------------- COVER ----------------
-    for _ in range(4):
-        doc.add_paragraph()
-    cover_tbl = doc.add_table(rows=5, cols=2)
-    cover_tbl.autofit = True
-    cover_rows = [
-        ("Nama Sekolah", data_input['sekolah']),
-        ("Nama Penyusun", data_input['guru']),
-        ("NIK", data_input.get('nik', '')),
-        ("Mata Pelajaran", data_input['mapel']),
-        ("Fase / Kelas / Semester",
-         f"{data_input['fase']} / {data_input['kelas']} ({data_input['semester']})"),
-    ]
-    for i, (label, val) in enumerate(cover_rows):
-        c0, c1 = cover_tbl.rows[i].cells
-        add_paragraph_in_cell(c0, label, bold=True, first=True)
-        shown = val if val else "________________________"
-        add_paragraph_in_cell(c1, f": {shown}", first=True)
+def create_docx(data_input, ai):
+    if not TEMPLATE_PATH.exists():
+        raise FileNotFoundError(f"Template tidak ditemukan: {TEMPLATE_PATH}")
+    doc = Document(str(TEMPLATE_PATH))
 
-    hr = doc.add_paragraph()
-    hr.paragraph_format.space_before = Pt(6)
-    add_bottom_border(hr)
+    # Judul dinamis
+    p = _find_heading(doc, "MATA PELAJARAN : ILMU PENGETAHUAN SOSIAL (IPS)")
+    if p:
+        _set_heading(p, f"MATA PELAJARAN : {data_input['mapel'].upper()}")
+    p = _find_heading(doc, "BAB 1: KELUARGA AWAL KEHIDUPAN")
+    if p:
+        _set_heading(p, f"BAB: {data_input['tema'].upper()}")
 
-    doc.add_paragraph()
-    doc.add_paragraph()
-    p_title = doc.add_paragraph()
-    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    style_run(p_title.add_run(judul_baris1), bold=True, size=16)
-    p_title2 = doc.add_paragraph()
-    p_title2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    style_run(p_title2.add_run(judul_baris2), bold=True, size=14)
+    # Identitas tabel cover
+    if doc.tables:
+        t = doc.tables[0]
+        if len(t.rows) >= 2:
+            txt = t.cell(1,0).text
+            _replace_cell = lambda cell, val: setattr(cell, "text", val)
+            _replace_cell(t.cell(1,0), f"Nama Sekolah : {data_input['sekolah']}")
+            # Hanya mengubah placeholder data, tidak mengubah struktur tabel.
+            _replace_cell(t.cell(1,0), f"Nama Sekolah       : {data_input['sekolah']}")
 
-    doc.add_page_break()
+    # Ganti identitas di halaman isi
+    ident = ai.get("identitas", [])
+    _replace_section(doc, "A. IDENTITAS MODUL", ident, "B. IDENTIFIKASI KESIAPAN PESERTA DIDIK")
 
-    # ---------------- HALAMAN ISI: JUDUL ULANG ----------------
-    p_title3 = doc.add_paragraph()
-    p_title3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    style_run(p_title3.add_run(judul_baris1), bold=True, size=13)
-    p_title4 = doc.add_paragraph()
-    p_title4.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    style_run(p_title4.add_run(judul_baris2), bold=True, size=13)
-    doc.add_paragraph()
+    # Bagian-bagian utama
+    _replace_section(doc, "B. IDENTIFIKASI KESIAPAN PESERTA DIDIK", ai.get("identifikasi_kesiapan"), "C. KARAKTERISTIK MATERI PELAJARAN")
+    _replace_section(doc, "C. KARAKTERISTIK MATERI PELAJARAN", ai.get("karakteristik_materi"), "D. DIMENSI PROFIL LULUSAN")
+    _replace_section(doc, "D. DIMENSI PROFIL LULUSAN", ai.get("dimensi_profil_lulusan"), "DESAIN PEMBELAJARAN")
+    _replace_section(doc, "A. CAPAIAN PEMBELAJARAN (CP) NOMOR 46 : TAHUN 2025", ai.get("capaian_pembelajaran"), "B. LINTAS DISIPLIN ILMU")
+    _replace_section(doc, "B. LINTAS DISIPLIN ILMU", ai.get("lintas_disiplin_ilmu"), "C. TUJUAN PEMBELAJARAN")
+    _replace_section(doc, "C. TUJUAN PEMBELAJARAN", ai.get("tujuan_pembelajaran"), "D. TOPIK PEMBELAJARAN KONTEKSTUAL")
+    _replace_section(doc, "D. TOPIK PEMBELAJARAN KONTEKSTUAL", ai.get("topik_kontekstual"), "E. KERANGKA PEMBELAJARAN")
+    _replace_section(doc, "PRAKTIK PEDAGOGIK", ai.get("praktik_pedagogik"), "KEMITRAAN PEMBELAJARAN")
+    _replace_section(doc, "KEMITRAAN PEMBELAJARAN", ai.get("kemitraan"), "LINGKUNGAN BELAJAR")
+    _replace_section(doc, "LINGKUNGAN BELAJAR", ai.get("lingkungan_belajar"), "PEMANFAATAN DIGITAL")
+    _replace_section(doc, "PEMANFAATAN DIGITAL", ai.get("pemanfaatan_digital"), "F. LANGKAH-LANGKAH PEMBELAJARAN BERDIFERENSIASI")
 
-    mt = ModulTable(doc)
+    # Pertemuan: isi tiap blok, termasuk judul blok.
+    for item in ai.get("pertemuan", []):
+        title = item.get("judul","").strip()
+        if not title:
+            continue
+        p = _find_heading(doc, title)
+        if not p:
+            # Cocokkan berdasarkan nomor pertemuan jika AI sedikit mengubah format judul.
+            m = re.search(r"PERTEMUAN\s+([0-9\-]+)", title)
+            if m:
+                key = m.group(1)
+                for hp in doc.paragraphs:
+                    if hp.style.name == "Heading 4" and hp.text.strip().startswith("PERTEMUAN " + key):
+                        p = hp; break
+        if p:
+            _set_heading(p, title)
+            paras = doc.paragraphs
+            idx = paras.index(p)
+            # Cari heading berikutnya
+            next_p = None
+            for q in paras[idx+1:]:
+                if q.style.name.startswith("Heading"):
+                    next_p = q; break
+            _fill_section(doc, idx, paras.index(next_p) if next_p else None, item.get("isi", []))
 
-    # ============ INFORMASI UMUM ============
-    mt.add_section_header("INFORMASI UMUM")
-    mt.add_section_header("A. IDENTITAS MODUL")
-    mt.add_label_value("Penyusun", data_input['guru'])
-    mt.add_label_value("Instansi", data_input['sekolah'])
-    mt.add_label_value("Tahun Penyusunan", data_input['tahun'])
-    mt.add_label_value("Jenjang Sekolah", data_input['jenjang'])
-    mt.add_label_value("Mata Pelajaran", data_input['mapel'])
-    mt.add_label_value("Fase / Kelas", f"{data_input['fase']} / {data_input['kelas']}")
-    mt.add_label_value("Tema", data_input['tema'])
-    mt.add_label_value("Materi", data_input['materi'])
-    mt.add_full_content(
-        [f"a) Elemen pemahaman dan ruang lingkup pembelajaran"] +
-        _g(ai_umum, 'elemen_a', ["-"]) +
-        ["b) Elemen keterampilan proses"] +
-        _g(ai_umum, 'elemen_b', ["-"])
-    )
-    mt.add_label_value("Capaian Pembelajaran", _g(ai_umum, 'capaian_pembelajaran', '-'))
-    mt.add_label_value("Alokasi Waktu", data_input['waktu'])
+    _replace_section(doc, "ASESMEN DIAGNOSTIK", ai.get("asesmen_diagnostik"), "ASESMEN FORMATIF")
+    _replace_section(doc, "ASESMEN FORMATIF", ai.get("asesmen_formatif"), "ASESMEN SUMATIF")
+    _replace_section(doc, "ASESMEN SUMATIF", ai.get("asesmen_sumatif"), None)
 
-    mt.add_section_header("B. KOMPETENSI AWAL")
-    mt.add_full_content(_g(ai_umum, 'kompetensi_awal', ['-']), bullet=True)
+    # Konten lampiran hanya jika pengguna meminta.
+    if data_input.get("pakai_lkpd") == "Ya":
+        _append_lampiran(doc, ai)
 
-    mt.add_section_header("C. PROFIL PELAJAR PANCASILA")
-    mt.add_full_content(data_input['profil'], bullet=True)
+    # Ganti placeholder pada tabel tanda tangan tanpa mengubah layout.
+    if len(doc.tables) >= 2:
+        t = doc.tables[-1]
+        if len(t.rows) and len(t.columns) >= 2:
+            left, right = t.cell(0,0), t.cell(0,1)
+            left.text = f"Mengetahui,\nKepala Sekolah\n\n\n\n{data_input.get('kepsek','..........................................')}"
+            right.text = f"{data_input.get('sekolah','')}, ......................... 20..\nGuru Mata Pelajaran\n\n\n\n{data_input['guru']}"
 
-    mt.add_section_header("D. SARANA DAN PRASARANA")
-    mt.add_full_content(_g(ai_umum, 'sarana_prasarana', ['-']), bullet=True)
-
-    mt.add_section_header("E. TARGET PESERTA DIDIK")
-    mt.add_full_content(_g(ai_umum, 'target_peserta_didik', ['-']), bullet=True)
-
-    mt.add_section_header("F. MODEL PEMBELAJARAN")
-    mt.add_full_content([
-        f"Model pembelajaran: {data_input['model_pembelajaran']}",
-        _g(ai_umum, 'model_pembelajaran_desc', '-')
-    ])
-
-    # ============ KOMPONEN INTI ============
-    mt.add_section_header("KOMPONEN INTI")
-
-    mt.add_section_header("A. TUJUAN KEGIATAN PEMBELAJARAN")
-    mt.add_full_content(_g(ai_umum, 'tujuan_pembelajaran', ['-']), bullet=True,
-                         italic_intro="Alur Tujuan Pembelajaran:")
-
-    mt.add_section_header("B. PEMAHAMAN BERMAKNA")
-    mt.add_full_content(_g(ai_umum, 'pemahaman_bermakna', ['-']), bullet=True)
-
-    mt.add_section_header("C. PERTANYAAN PEMANTIK")
-    mt.add_full_content(_g(ai_umum, 'pertanyaan_pemantik', ['-']), bullet=True)
-
-    mt.add_section_header("D. KEGIATAN PEMBELAJARAN")
-    mt.add_full_content(_g(ai_umum, 'kegiatan_pendahuluan', ['-']),
-                         italic_intro="Kegiatan Pendahuluan")
-    mt.add_full_content(_g(ai_umum, 'kegiatan_inti', ['-']),
-                         italic_intro="Kegiatan Inti")
-    mt.add_full_content(_g(ai_umum, 'kegiatan_penutup', ['-']),
-                         italic_intro="Kegiatan Penutup")
-
-    mt.add_section_header("E. REFLEKSI")
-    mt.add_full_content(_g(ai_umum, 'refleksi_guru', '-'))
-    mt.add_full_content(_g(ai_umum, 'refleksi_sikap', ['-']), bullet=True,
-                         italic_intro="Sikap")
-    mt.add_full_content(_g(ai_umum, 'refleksi_pengetahuan', ['-']), bullet=True,
-                         italic_intro="Pengetahuan")
-    mt.add_full_content(_g(ai_umum, 'refleksi_keterampilan', ['-']), bullet=True,
-                         italic_intro="Keterampilan")
-
-    # ---------- F. ASESMEN / PENILAIAN ----------
-    mt.add_section_header("F. ASESMEN / PENILAIAN")
-    mt.add_full_content(_g(ai_asesmen, 'asesmen_konsep', '-'))
-
-    mt.add_full_content(None, italic_intro="1. Penilaian Kompetensi Sikap")
-    mt.add_full_content([
-        "Teknik: observasi, penilaian diri, dan penilaian antar teman, "
-        "dicatat pada jurnal perkembangan sikap oleh guru mata pelajaran selama satu semester."
-    ])
-
-    mt.add_full_content(None, italic_intro="Contoh Jurnal Penilaian Sikap")
-    mt.add_nested_table(
-        headers=["No", "Waktu", "Nama Siswa", "Catatan Perilaku", "Butir Sikap"],
-        rows=[["", "", "", "", ""] for _ in range(4)],
-        col_widths_cm=[1, 2.5, 3, 5.5, 3.5]
-    )
-
-    mt.add_full_content(None, italic_intro="2. Penilaian Kompetensi Pengetahuan")
-    kisi = _g(ai_asesmen, 'kisi_kisi_tes', {})
-    mt.add_full_content(None, italic_intro="Kisi-kisi Tes Tertulis")
-    mt.add_nested_table(
-        headers=["No", "Kompetensi Dasar", "Materi", "Indikator Soal", "Bentuk", "Jumlah Soal"],
-        rows=[["1", kisi.get('kd', '-'), kisi.get('materi', '-'), kisi.get('indikator', '-'),
-               kisi.get('bentuk', 'Tes Tertulis'), str(kisi.get('jumlah_soal', '-'))]],
-        col_widths_cm=[1, 3, 2.5, 4.5, 2, 2]
-    )
-    mt.add_full_content(_g(ai_asesmen, 'butir_soal', ['-']), italic_intro="Butir Soal")
-
-    kunci_rows = [[k.get('no', str(i + 1)), k.get('kunci', '-'), str(k.get('skor', '-'))]
-                  for i, k in enumerate(_g(ai_asesmen, 'kunci_skor', []))]
-    if kunci_rows:
-        mt.add_full_content(None, italic_intro="Kunci Jawaban dan Pedoman Skor")
-        mt.add_nested_table(
-            headers=["No. Soal", "Kunci Jawaban", "Skor"],
-            rows=kunci_rows,
-            col_widths_cm=[2, 11.5, 2]
-        )
-
-    mt.add_full_content(_g(ai_asesmen, 'tes_lisan', ['-']), bullet=True, italic_intro="Tes Lisan")
-
-    mt.add_full_content(None, italic_intro="Penugasan")
-    kp = _g(ai_asesmen, 'kisi_kisi_penugasan', {})
-    mt.add_nested_table(
-        headers=["Kompetensi Dasar", "Materi", "Indikator"],
-        rows=[[kp.get('kd', '-'), kp.get('materi', '-'), kp.get('indikator', '-')]],
-        col_widths_cm=[5, 4, 6.5]
-    )
-    mt.add_full_content(_g(ai_asesmen, 'deskripsi_penugasan', '-'))
-    rp_rows = [[r.get('aspek', '-'), r.get('skor', '-')] for r in _g(ai_asesmen, 'rubrik_penugasan', [])]
-    if rp_rows:
-        mt.add_nested_table(
-            headers=["Aspek yang Dinilai", "Rentang Skor"],
-            rows=rp_rows,
-            col_widths_cm=[11.5, 4]
-        )
-
-    mt.add_full_content(None, italic_intro="3. Penilaian Kompetensi Keterampilan")
-    mt.add_full_content(None, italic_intro="Penilaian Kinerja")
-    kk = _g(ai_asesmen, 'kisi_kisi_kinerja', {})
-    mt.add_nested_table(
-        headers=["Kompetensi Dasar", "Materi", "Indikator"],
-        rows=[[kk.get('kd', '-'), kk.get('materi', '-'), kk.get('indikator', '-')]],
-        col_widths_cm=[5, 4, 6.5]
-    )
-    rk_rows = [[r.get('indikator', '-'), r.get('rubrik', '-')] for r in _g(ai_asesmen, 'rubrik_kinerja', [])]
-    if rk_rows:
-        mt.add_nested_table(
-            headers=["Indikator", "Rubrik Penskoran"],
-            rows=rk_rows,
-            col_widths_cm=[5, 10.5]
-        )
-
-    mt.add_full_content(None, italic_intro="Penilaian Proyek")
-    kpr = _g(ai_asesmen, 'kisi_kisi_proyek', {})
-    mt.add_nested_table(
-        headers=["Kompetensi Dasar", "Materi", "Indikator"],
-        rows=[[kpr.get('kd', '-'), kpr.get('materi', '-'), kpr.get('indikator', '-')]],
-        col_widths_cm=[5, 4, 6.5]
-    )
-    mt.add_full_content(_g(ai_asesmen, 'tugas_proyek', ['-']), bullet=True,
-                         italic_intro="Langkah Pengerjaan Proyek")
-    rpr_rows = [[r.get('pernyataan', '-'), r.get('keterangan', '-')]
-                for r in _g(ai_asesmen, 'rubrik_proyek', [])]
-    if rpr_rows:
-        mt.add_nested_table(
-            headers=["Aspek yang Dinilai", "Keterangan Penilaian"],
-            rows=rpr_rows,
-            col_widths_cm=[6, 9.5]
-        )
-
-    mt.add_section_header("G. KEGIATAN PENGAYAAN DAN REMEDIAL")
-    mt.add_full_content(_g(ai_umum, 'remedial_catatan', '-'), italic_intro="Remedial")
-    mt.add_full_content(_g(ai_umum, 'pengayaan', '-'), italic_intro="Pengayaan")
-
-    # ============ LAMPIRAN ============
-    if data_input.get('pakai_lkpd') == 'Ya':
-        mt.add_section_header("LAMPIRAN")
-
-        mt.add_section_header("A. LEMBAR KERJA PESERTA DIDIK (LKPD)")
-        mt.add_full_content([f"Nama :", f"Kelas :", _g(ai_asesmen, 'lkpd_petunjuk', '-')])
-        mt.add_full_content(_g(ai_asesmen, 'lkpd_soal', ['-']), bullet=True)
-
-        mt.add_section_header("B. BAHAN BACAAN GURU & PESERTA DIDIK")
-        mt.add_full_content(_g(ai_asesmen, 'bahan_bacaan_siswa', '-'),
-                             italic_intro="Bahan Bacaan Peserta Didik")
-        mt.add_full_content(_g(ai_asesmen, 'bahan_bacaan_guru', '-'),
-                             italic_intro="Bahan Bacaan Guru")
-
-        mt.add_section_header("C. GLOSARIUM")
-        glos = _g(ai_asesmen, 'glosarium', [])
-        glos_text = [f"{g.get('istilah', '-')} : {g.get('definisi', '-')}" for g in glos] or ["-"]
-        mt.add_full_content(glos_text, bullet=True)
-
-        mt.add_section_header("D. DAFTAR PUSTAKA")
-        mt.add_full_content(_g(ai_asesmen, 'daftar_pustaka', ['-']), bullet=True)
-
-    # ---------------- TANDA TANGAN ----------------
-    doc.add_paragraph()
-    ttd_table = doc.add_table(rows=1, cols=2)
-    ttd_table.autofit = False
-    for cell in ttd_table.rows[0].cells:
-        cell.width = Cm(8.25)
-    c1 = ttd_table.cell(0, 0)
-    c1.text = f"Mengetahui,\nKepala Sekolah\n\n\n\n( {data_input['kepsek']} )"
-    c1.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-    c2 = ttd_table.cell(0, 1)
-    c2.text = f"Guru Mata Pelajaran\n\n\n\n( {data_input['guru']} )"
-    c2.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
+    # Normal style mengikuti template; jangan memaksa font baru.
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer
+
+def _append_lampiran(doc, ai):
+    # Menambahkan lampiran mengikuti gaya Normal/Heading dari template.
+    doc.add_page_break()
+    h = doc.add_paragraph("LAMPIRAN", style="Heading 2")
+    doc.add_paragraph("A. LEMBAR KERJA PESERTA DIDIK (LKPD)", style="Heading 3")
+    for x in ai.get("lkpd", []): doc.add_paragraph(str(x))
+    doc.add_paragraph("B. BAHAN BACAAN GURU & PESERTA DIDIK", style="Heading 3")
+    for x in ai.get("bahan_bacaan", []): doc.add_paragraph(str(x))
+    doc.add_paragraph("C. GLOSARIUM", style="Heading 3")
+    for x in ai.get("glosarium", []): doc.add_paragraph(str(x))
+    doc.add_paragraph("D. DAFTAR PUSTAKA", style="Heading 3")
+    for x in ai.get("daftar_pustaka", []): doc.add_paragraph(str(x))
