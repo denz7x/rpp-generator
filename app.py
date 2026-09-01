@@ -26,7 +26,7 @@ except Exception as e:
 # 2. PENGATURAN TAMPILAN
 # ==========================================
 st.set_page_config(
-    page_title="EduGen Pro",
+    page_title="MODUL AJAR GENERATOR",
     page_icon="🚀",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -141,7 +141,7 @@ def get_available_model():
                 available_models.append(m.name)
         if not available_models:
             return None
-        prioritas = ["models/gemini-2.5-flash", "models/gemini-1.5-flash"]
+        prioritas = ["models/gemini-3.6-flash", "models/gemini-1.5-flash", "models/gemini-2.5-flash"]
         for nama in prioritas:
             if nama in available_models:
                 return nama
@@ -158,10 +158,11 @@ active_model = get_available_model()
 # ==========================================
 st.markdown("""
 <div class="header-container">
-    <h1 style="margin: 0; font-size: 1.6rem; font-weight: 800; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">🚀 EduGen Pro</h1>
-    <p style="margin: 0.2rem 0 0 0; font-size: 0.85rem; font-weight: 500;">Penyusun Modul Ajar & LKPD Cerdas — Format Resmi Kurikulum Merdeka</p>
+    <h1 style="margin: 0; font-size: 1.6rem; font-weight: 600; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">🚀 GENERATOR MODUL AJAR</h1>
+    <p style="margin: 0.2rem 0 0 0; font-size: 0.85rem; font-weight: 500;">Penyusun Modul Ajar Deep Learning Kurikulum Merdeka</p>
     <div style="margin-top: 8px; font-size: 0.75rem; background: rgba(0,0,0,0.15); padding: 4px 10px; border-radius: 20px; display: inline-block;">
-        Ceng Ucu Muhammad, S.H - SMP IT Nurusy Syifa
+        dibuat oleh : 
+        Ceng Ucu Muhammad, S.H - ( Kepala Sekolah SMP IT Nurusy Syifa )
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -173,9 +174,10 @@ with tab1:
     st.markdown('<div class="stCard card-biru"><h4 style="margin-top:0; color:#0369a1;">🧑‍🏫 Identitas Penyusun</h4>', unsafe_allow_html=True)
     nama_guru = st.text_input("Nama Guru / Penyusun", placeholder="Cth: Ust. Ahmad Fauzi, S.Pd")
     nik_guru = st.text_input("NIK / NIP (opsional)", placeholder="Cth: 198501012010011001")
-    nama_sekolah = st.text_input("Nama Instansi / Sekolah", value="Pondok Pesantren Nurusy Syifa")
+    nama_sekolah = st.text_input("Nama Instansi / Sekolah", value="SMP IT Nurusy Syifa")
     nama_kepsek = st.text_input("Nama Kepala Sekolah / Pengasuh", placeholder="Cth: KH. Ahmad, M.Pd")
     tahun_penyusunan = st.text_input("Tahun Penyusunan", value="Tahun 2026")
+    tahun_pelajaran = st.text_input("Tahun Pelajaran", value="2026/2027", help="Ditulis pada Identitas Modul & tanda tangan, cth: 2026/2027")
     jenjang_sekolah = st.selectbox("Jenjang Sekolah", ["SMP/MTs", "SMA/MA", "SD/MI"], index=0)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -188,18 +190,24 @@ with tab1:
         kelas = st.selectbox("Kelas", ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"], index=6)
     with col_c:
         semester = st.selectbox("Semester", ["Ganjil", "Genap"], index=0)
-    tema = st.text_input("Tema / Bab", placeholder="Cth: Keluarga Awal Kehidupan")
+    nomor_bab = st.text_input("Nomor BAB", value="1")
+    tema = st.text_input("Tema / Judul BAB", placeholder="Cth: Keluarga Awal Kehidupan")
     topik = st.text_input("Materi / Topik*", placeholder="Wajib diisi: Cth: Sejarah Keluarga")
-    waktu = st.text_input("Alokasi Waktu", value="2 JP (2 x 40 Menit)")
-    model_pembelajaran = st.selectbox(
-        "Model Pembelajaran",
-        ["Tatap Muka", "Resitasi", "Discovery Learning", "Problem Based Learning",
-         "Project Based Learning", "Cooperative Learning"], index=0
+    waktu = st.text_input("Alokasi Waktu Total", value="30 JP (15 kali pertemuan)")
+    jumlah_pertemuan = st.number_input(
+        "Jumlah Blok Pertemuan", min_value=1, max_value=20, value=8,
+        help="Jumlah blok 'PERTEMUAN X (n JP)' yang akan disusun rinci pada bagian F (Langkah-langkah Pembelajaran). "
+             "Contoh modul resmi memakai 8 blok untuk total 30 JP / 15 pertemuan."
     )
-    profil = st.multiselect("Profil Pelajar Pancasila", st.session_state['profil_db'],
+    model_pembelajaran = st.selectbox(
+        "Model Pembelajaran (acuan utama)",
+        ["Bervariasi (Discovery, PBL, Group Investigation, Resitasi)", "Tatap Muka", "Resitasi",
+         "Discovery Learning", "Problem Based Learning",
+         "Project Based Learning", "Cooperative Learning", "Group Investigation"], index=0
+    )
+    profil = st.multiselect("Profil Pelajar Pancasila (untuk Integrasi Nilai dan Karakter)",
+                             st.session_state['profil_db'],
                              default=st.session_state['profil_db'][:2])
-    pilihan_lkpd = st.radio("Sertakan Lampiran (LKPD, Bahan Bacaan, Glosarium, Daftar Pustaka)?",
-                             ["Ya", "Tidak"], horizontal=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     submitted = st.button("🚀 GENERATE SEKARANG", use_container_width=True, type="primary")
@@ -211,14 +219,20 @@ with tab2:
 
         st.markdown('<div class="stCard card-cyan">', unsafe_allow_html=True)
         with st.expander("🎯 Tujuan Pembelajaran", expanded=True):
-            st.write(st.session_state.ai_umum.get('tujuan_pembelajaran'))
-        with st.expander("🔥 Kegiatan Inti", expanded=True):
-            st.write(st.session_state.ai_umum.get('kegiatan_inti'))
+            for item in st.session_state.ai_umum.get('tujuan_pembelajaran', []):
+                st.write(f"- Pertemuan {item.get('pertemuan')}: {item.get('deskripsi')} ({item.get('jp')} JP)")
+        with st.expander("🧭 Dimensi Profil Lulusan", expanded=False):
+            for desc in st.session_state.ai_umum.get('dimensi_profil_lulusan_desc', []):
+                st.write(f"- {desc}")
         if st.session_state.ai_asesmen:
-            with st.expander("📝 Asesmen (Butir Soal)"):
-                st.write(st.session_state.ai_asesmen.get('butir_soal'))
-            with st.expander("📚 LKPD"):
-                st.write(st.session_state.ai_asesmen.get('lkpd_soal'))
+            with st.expander("🔥 Langkah Pembelajaran per Pertemuan", expanded=True):
+                for pert in st.session_state.ai_asesmen.get('langkah_pembelajaran', []):
+                    st.write(f"**Pertemuan {pert.get('pertemuan')} ({pert.get('jp_label')}) — {pert.get('topik')}**")
+            with st.expander("📝 Asesmen (Contoh Soal)"):
+                for soal in st.session_state.ai_asesmen.get('soal_pg', []):
+                    st.write(f"- {soal.get('soal')}")
+                for soal in st.session_state.ai_asesmen.get('soal_esai', []):
+                    st.write(f"- {soal}")
         st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.info("💡 Hasil modul ajar akan muncul di sini setelah kamu klik Generate.")
@@ -252,11 +266,13 @@ if 'submitted' in locals() and submitted:
         ctx = {
             'mapel': mapel, 'jenjang': jenjang_sekolah, 'fase': fase, 'kelas': kelas,
             'semester': semester, 'tema': tema or topik, 'materi': topik, 'waktu': waktu,
+            'jumlah_pertemuan': int(jumlah_pertemuan),
+            'tahun_pelajaran': tahun_pelajaran,
             'model_pembelajaran': model_pembelajaran, 'profil': profil,
         }
-        with st.spinner("✨ Menyusun Informasi Umum & Komponen Inti..."):
+        with st.spinner("✨ Menyusun Identitas Modul & Desain Pembelajaran..."):
             ai_umum = generate_bagian_umum(active_model, ctx)
-        with st.spinner("✨ Menyusun Asesmen Lengkap & Lampiran..."):
+        with st.spinner("✨ Menyusun Langkah Pembelajaran per Pertemuan & Asesmen..."):
             ai_asesmen = generate_asesmen_lampiran(active_model, ctx)
 
         if ai_umum is None or ai_asesmen is None:
@@ -266,11 +282,12 @@ if 'submitted' in locals() and submitted:
             st.session_state.ai_asesmen = ai_asesmen
             st.session_state.data_input = {
                 'guru': nama_guru, 'sekolah': nama_sekolah, 'kepsek': nama_kepsek,
-                'nik': nik_guru, 'tahun': tahun_penyusunan, 'jenjang': jenjang_sekolah,
+                'nik': nik_guru, 'tahun': tahun_penyusunan, 'tahun_pelajaran': tahun_pelajaran,
+                'jenjang': jenjang_sekolah,
                 'mapel': mapel, 'fase': fase, 'kelas': kelas, 'semester': semester,
                 'tema': tema or topik, 'materi': topik, 'waktu': waktu,
+                'nomor_bab': nomor_bab,
                 'model_pembelajaran': model_pembelajaran, 'profil': profil,
-                'pakai_lkpd': pilihan_lkpd,
             }
             st.rerun()
 
